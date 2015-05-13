@@ -1,4 +1,4 @@
-package coref.dagger
+package dagger.core
 
 import scala.reflect.ClassTag
 

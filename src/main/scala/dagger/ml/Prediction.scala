@@ -1,4 +1,4 @@
-package coref.ml
+package dagger.ml
 
 import scala.util.Random
 import scala.collection.Map

@@ -1,4 +1,4 @@
-package coref.util
+package dagger.util
 
 	class ArgParser(argArray: Array[String]) {
 		var args = argArray

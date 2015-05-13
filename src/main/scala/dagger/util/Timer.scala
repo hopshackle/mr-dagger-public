@@ -1,4 +1,4 @@
-package coref.util
+package dagger.util
 
 /**
  * Created with IntelliJ IDEA.

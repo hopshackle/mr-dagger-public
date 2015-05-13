@@ -1,8 +1,6 @@
-package coref.ml
+package dagger.ml
 
 import java.io.{File, FileWriter}
-
-import coref.system._
 
 import collection.mutable.HashMap
 // import java.util.HashMap
@@ -68,13 +66,13 @@ object AROWClassifier {
     AROWClassifier(weights, variances)
   }
 
-  def fromFile[T: ClassTag](filename: String): AROWClassifier[T] = {
+  def fromFile[T: ClassTag](filename: String, actionMap: (String => T)): AROWClassifier[T] = {
     val weights = new HashMap[T, HashMap[Int, Double]]
     val variances = new HashMap[T, HashMap[Int, Double]]
     val lines = io.Source.fromFile(filename).getLines
     lines.foreach { line =>
       val cols = line.split("\t")
-      val label = actionMap[T](cols(0))
+      val label = actionMap(cols(0))
       val f = cols(1).toInt
       val w = cols(2).toDouble
       if (!weights.contains(label)) weights(label) = new HashMap[Int,Double]
@@ -83,16 +81,16 @@ object AROWClassifier {
     AROWClassifier(weights, variances)
   }
 
-  def actionMap[T](str: String): T = {
-    val matched = str match {
-      case "MentionAction" => MentionAction
-      case "NoMentionAction" => NoMentionAction
-      case "CorefLinkAction" => CorefLinkAction
-      case "CorefNoLinkAction" => CorefNoLinkAction
-      case "CorefNewClusterAction" => CorefNewClusterAction
-    }
-    matched.asInstanceOf[T]
-  }
+//  def actionMap[T](str: String): T = {
+//    val matched = str match {
+//      case "MentionAction" => MentionAction
+//      case "NoMentionAction" => NoMentionAction
+//      case "CorefLinkAction" => CorefLinkAction
+//      case "CorefNoLinkAction" => CorefNoLinkAction
+//      case "CorefNewClusterAction" => CorefNewClusterAction
+//    }
+//    matched.asInstanceOf[T]
+//  }
 }
 
 
@@ -130,7 +128,7 @@ object AROW {
 
     // Begin training loop
     println("Beginning %d rounds of training with %d instances and smoothing parameter %.2f.".format(rounds, data.size, smoothing))
-    val timer = new coref.util.Timer
+    val timer = new dagger.util.Timer
     timer.start
     var classifier = new AROWClassifier[T](weightVectors, varianceVectors)
     for (r <- 1 to rounds) {

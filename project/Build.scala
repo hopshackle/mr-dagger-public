@@ -33,8 +33,8 @@ object ShellPrompt {
 }
 
 object BuildSettings {
-  val buildName         = "mr-dagger"
-  val buildOrganization = "uclmr"
+  val buildName         = "dagger"
+  val buildOrganization = "mr.dagger"
   val buildScalaVersion = "2.11.4"
   val buildSbtVersion = "0.13.7"
 

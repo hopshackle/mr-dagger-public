@@ -1,4 +1,4 @@
-package coref.dagger
+package dagger.core
 
 /**
  * Created by narad on 6/19/14.

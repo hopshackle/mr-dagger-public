@@ -1,4 +1,4 @@
-package coref.ml
+package dagger.ml
 
 import gnu.trove._
 import gnu.trove.map.hash.THashMap

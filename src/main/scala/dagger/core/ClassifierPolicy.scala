@@ -1,6 +1,6 @@
-package coref.dagger
+package dagger.core
 
-import coref.ml.{Instance, MultiClassClassifier}
+import dagger.ml.{Instance, MultiClassClassifier}
 
 
 /**

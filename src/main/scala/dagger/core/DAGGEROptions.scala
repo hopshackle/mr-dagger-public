@@ -1,6 +1,6 @@
-package coref.dagger
+package dagger.core
 
-import coref.ml.AROWOptions
+import dagger.ml.AROWOptions
 
 /**
  * Created by narad on 10/18/14.
@@ -37,11 +37,9 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   lazy val MODEL_FILE = getString("--model.file", "model")
 
-  lazy val NUM_CORES = getInt("--num.cores", 8)
+  lazy val NUM_CORES = getInt("--num.cores", 1)
 
   lazy val NUM_SAMPLES = getInt("--samples", 3)
-
-  lazy val PARALLELIZE = getBoolean("--parallelize", false)
 
   lazy val POLICY_DECAY = getDouble("--policy.decay", 0.2)
 

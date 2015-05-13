@@ -1,4 +1,4 @@
-package coref.util
+package dagger.util
 
 import collection.immutable.Map
 /**

@@ -1,9 +1,9 @@
-package coref.dagger
+package dagger.core
 
 import java.io.FileWriter
 
-import coref.ml.Instance
-import ml.wolfe.nlp.io.ChunkReader
+import dagger.ml.Instance
+// import ml.wolfe.nlp.io.ChunkReader
 
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -17,7 +17,7 @@ object OracleExtractor {
 
   def instances[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionState : ClassTag] (data: Iterable[D], trans: TransitionSystem[D, A, S],features: (D, S) => Map[Int, Double], printInterval: Int = 1000): Iterable[Instance[A]] = {
     val instances = new ArrayBuffer[Instance[A]]
-    val timer = new coref.util.Timer
+    val timer = new dagger.util.Timer
     timer.start()
     for ((d, didx) <- data.view.zipWithIndex) {
       if (didx % printInterval == 0) println("Processing instance %d...".format(didx))

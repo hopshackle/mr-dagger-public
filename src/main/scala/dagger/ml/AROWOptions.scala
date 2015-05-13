@@ -1,6 +1,6 @@
-package coref.ml
+package dagger.ml
 
-import coref.util.ArgParser
+import dagger.util.ArgParser
 
 /**
  * Created by narad on 10/16/14.
@@ -13,6 +13,8 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
   lazy val RARE_FEATURE_COUNT = getInt("--rare.feat.count", 0)
 
   lazy val RANDOM_SEED = getInt("--random.seed", 1)
+
+  lazy val RATE = getDouble("--rate", 0.1)
 
   lazy val SHUFFLE = getBoolean("--shuffle", default = false)
 

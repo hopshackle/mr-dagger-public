@@ -1,4 +1,4 @@
-package coref.util
+package dagger.util
 
 /**
  * Created by narad on 4/30/15.
