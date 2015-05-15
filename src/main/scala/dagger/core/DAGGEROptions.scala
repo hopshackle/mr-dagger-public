@@ -55,6 +55,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
       "  Approximate loss directly? %s\n".format(APPROXIMATE_LOSS) +
       "  Number of samples: %d\n".format(NUM_SAMPLES) +
       "  Policy decay rate: %f\n".format(POLICY_DECAY) +
+      "  Number of cores: %d\n".format(NUM_CORES)
       super.toString
   }
 
