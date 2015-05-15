@@ -39,7 +39,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       val policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       instances ++= collectInstances(data, expert, policy, features, trans, loss) //collectInstances(data, expert, policy, features, trans, loss, prob)
-      classifier = trainFromInstances(instances, trans.actions)
+      classifier = trainFromInstances(instances, trans.actions, old = classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
       if (dev.nonEmpty) stats(dev, policy, trans, features, loss, score)
@@ -166,10 +166,15 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
     (Some(trans.construct(state, ex)), actions.toArray)
   }
 
-  def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A]): MultiClassClassifier[A] = options.CLASSIFIER match {
-    case "AROW" => AROW.train[A](instances, actions, options)
-    case "PASSIVE_AGGRESSIVE" => PassiveAggressive.train[A](instances, actions, options.RATE, random, options)
-    case "PERCEPTRON" => Perceptron.train[A](instances, actions, options.RATE, random, options)
+  def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = options.CLASSIFIER match {
+    case "AROW" => {
+      old match {
+        case c: AROWClassifier[A] => AROW.train[A](instances, actions, options, Some(c))
+        case _ => AROW.train[A](instances, actions, options)
+      }
+    }
+    case "PASSIVE_AGGRESSIVE" => ??? //PassiveAggressive.train[A](instances, actions, options.RATE, random, options)
+    case "PERCEPTRON" => ??? // Perceptron.train[A](instances, actions, options.RATE, random, options)
   }
 
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
