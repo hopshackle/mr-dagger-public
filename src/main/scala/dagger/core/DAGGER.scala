@@ -34,12 +34,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
     // Begin DAGGER training
     val instances = new ArrayBuffer[Instance[A]]
     var classifier = null.asInstanceOf[MultiClassClassifier[A]]
+    var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val prob = math.pow(1.0 - options.POLICY_DECAY, i-1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      val policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       instances ++= collectInstances(data, expert, policy, features, trans, loss) //collectInstances(data, expert, policy, features, trans, loss, prob)
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
+      policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
       if (dev.nonEmpty) stats(dev, policy, trans, features, loss, score)
@@ -51,7 +52,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
                 features: (D, S) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S], prob: Double = 1.0): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
-    val instances = new ArrayBuffer[Instance[A]]
     // Compute the probability of choosing the oracle policy in this round
     //      val prob = math.pow(1.0 - options.POLICY_DECAY, i-1)
     //      println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
@@ -60,12 +60,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
 //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
     var dcount = 0
-    fork(data, options.NUM_CORES).foreach { d =>
+    fork(data, options.NUM_CORES).flatMap { d =>
       dcount += 1
       //for ((d,dcount) <- data.view.zipWithIndex) {
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
         System.err.print("\r..instance %d, average time per instance = %s".format(dcount, timer.toString(divisor = dcount)))
       }
+      val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
       // Check that the oracle policy is correct
@@ -74,7 +75,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
       // Initialize state from data example
       var state = trans.init(d)
       // For all actions used to predict the unrolled structure...
-      for (a <- predActions) {
+      //for (a <- predActions)
+      predActions.map { a =>
         // Find all actions permissible for current state
         val permissibleActions = trans.permissibleActions(state)
         // If using caching, check for a stored set of costs for this state
@@ -114,15 +116,16 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
         val ncosts = costs.map(_ - min)
 
         // Construct new training instance with sampled losses
-        val instance =new Instance[A](features(d, state), permissibleActions, ncosts)
+        val instance = new Instance[A](features(d, state), permissibleActions, ncosts)
 
 //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
         // Progress to next state in the predicted path
         state = a(state)
+        instance
       }
-    }
-    instances.toArray
+    }.toArray
+   // instances.toArray
   }
 
 
@@ -182,15 +185,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
     unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0)
   }
 
-  def fork(data: Iterable[D], forkSize: Int): ParIterable[D] = {
-//    if (options.NUM_CORES > 1) {
-      val par = data.par
-      par.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(options.NUM_CORES))
-      par
-//    }
-//    else {
-//      data
-//    }
+  def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
+    val par = data.par
+    par.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(forkSize))
+    par
   }
 
   def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features:  (D, S) => Map[Int, Double],

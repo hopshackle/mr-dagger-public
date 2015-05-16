@@ -21,6 +21,8 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]]
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
+  //  println("instance is null ?" + instance == null)
+  //  println("size:" + instance.labels.size)
     val scores = instance.labels.map { label =>
       if (!weights.contains(label)) weights(label) = new HashMap[Int, Double]
       label -> dotMap(instance.featureVector, weights(label))
@@ -137,6 +139,7 @@ object AROW {
       for ((instance, i) <- instances.view.zipWithIndex) {
         if (printInterval > 0 && i % printInterval == 0) print("\rRound %d...instance %d...".format(r, i))
 
+        //println(instance)
         val prediction = classifier.predict(instance)
         val maxLabel = prediction.maxLabel
         val maxScore = prediction.maxScore
