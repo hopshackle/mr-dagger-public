@@ -186,6 +186,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
+    System.err.println("Parallelizing to %d cores...".format(forkSize))
     val par = data.par
     par.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(forkSize))
     par
