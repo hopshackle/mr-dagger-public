@@ -146,7 +146,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
              start: S, trans: TransitionSystem[D, A, S],
              featureFunction: (D, S) => Map[Int, Double],
              prob: Double = 1.0): (Option[D], Array[A]) = {
-    println("unrolling...")
     val actions = new ArrayBuffer[A]
     var state = start
     while (!trans.isTerminal(state)) {
