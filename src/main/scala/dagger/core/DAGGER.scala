@@ -64,7 +64,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
       dcount += 1
       //for ((d,dcount) <- data.view.zipWithIndex) {
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
-        System.err.print("\r..instance %d, average time per instance = %s".format(dcount, timer.toString(divisor = dcount)))
+        System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
       }
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
@@ -113,10 +113,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
         }
         // Reduce all costs until the min cost is 0
         val min = costs.minBy(_ * 1.0)
-        val ncosts = costs.map(_ - min)
+        val normedCosts = costs.map(_ - min)
 
         // Construct new training instance with sampled losses
-        val instance = new Instance[A](features(d, state), permissibleActions, ncosts)
+        val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
 
 //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
@@ -146,6 +146,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
              start: S, trans: TransitionSystem[D, A, S],
              featureFunction: (D, S) => Map[Int, Double],
              prob: Double = 1.0): (Option[D], Array[A]) = {
+    println("unrolling...")
     val actions = new ArrayBuffer[A]
     var state = start
     while (!trans.isTerminal(state)) {
