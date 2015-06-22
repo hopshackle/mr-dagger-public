@@ -137,6 +137,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
         System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
       }
+      debug.close()
       allInstances
     }.toArray
     // instances.toArray
