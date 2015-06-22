@@ -38,7 +38,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionSt
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val prob = math.pow(1.0 - options.POLICY_DECAY, i-1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      instances ++= collectInstances(data, expert, policy, features, trans, loss) //collectInstances(data, expert, policy, features, trans, loss, prob)
+      instances ++= collectInstances(data, expert, policy, features, trans, loss, prob) 
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
