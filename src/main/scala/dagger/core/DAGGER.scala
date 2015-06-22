@@ -64,9 +64,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     fork(data, options.NUM_CORES).flatMap { d =>
       dcount += 1
       //for ((d,dcount) <- data.view.zipWithIndex) {
-      if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
-        System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
-      }
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
@@ -77,7 +74,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       var state = trans.init(d)
       // For all actions used to predict the unrolled structure...
       //for (a <- predActions)
-      predActions.map { a =>
+      val allInstances = predActions.map { a =>
         // Find all actions permissible for current state
         val permissibleActions = trans.permissibleActions(state)
         // If using caching, check for a stored set of costs for this state
@@ -137,6 +134,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         state = a(state)
         instance
       }
+      if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
+        System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
+      }
+      allInstances
     }.toArray
     // instances.toArray
   }
