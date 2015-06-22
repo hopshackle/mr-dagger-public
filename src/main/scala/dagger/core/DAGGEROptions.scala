@@ -44,6 +44,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val POLICY_DECAY = getDouble("--policy.decay", 0.2)
 
   lazy val SERIALIZE = getBoolean("--serialize", default = false)
+  
+  lazy val DEBUG = getBoolean("--debug", default = false)
 
   override def toString = {
     "DAGGER Options:\n" +
