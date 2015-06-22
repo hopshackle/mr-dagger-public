@@ -233,7 +233,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     }.foldLeft(0.0)(_ + _)
     val totalScore = score(data.zip(decoded.map(_._1.get)))
     println(f"Total Score:\t$totalScore%.2f")
-    println(f"Mean Loss:\t${totalLoss / data.size}%.2f\t")
+    println(f"Mean F-Score:\t${1.0 - totalLoss / data.size}%.2f")
     debug.close()
   }
 }
