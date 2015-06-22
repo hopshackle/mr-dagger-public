@@ -100,7 +100,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               // Otherwise use the max cost
               sampledEx match {
                 case Some(structure) =>
-                  val ll = loss(gold = d, test = structure, sampledActions)
+                  val ll = loss(gold = d, test = structure, sampledActions, l)
                   if (options.DEBUG) debug.write("Loss on action " + l + " = " + ll + "\n")
                   ll
                 case None =>
@@ -127,7 +127,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
         // Construct new training instance with sampled losses
         val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
-
+        loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
         // Progress to next state in the predicted path
