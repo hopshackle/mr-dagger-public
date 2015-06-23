@@ -129,12 +129,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           debug.write("\n")
         }
         // Construct new training instance with sampled losses
+        if (options.DEBUG) println("Completed sample " + dcount)
         val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
         // Progress to next state in the predicted path
         state = a(state)
+        if (options.DEBUG) println("Generated final instance for  " + dcount)
         instance
       }
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
