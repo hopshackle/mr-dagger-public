@@ -80,7 +80,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val allInstances = predActions.map { a =>
         // Find all actions permissible for current state
         if (options.DEBUG) debug.write(state + "\n")
+        if (options.DEBUG) println("Starting Action: " + a)
         val permissibleActions = trans.permissibleActions(state)
+        if (options.DEBUG) println("Permissible Actions: " + permissibleActions.size)
         // If using caching, check for a stored set of costs for this state
         //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
         //            cache(state)
