@@ -61,7 +61,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_collectInstances_debug." + prob + ".txt")
     var dcount = 0
-    fork(data, options.NUM_CORES).flatMap { d =>
+    val allData = fork(data, options.NUM_CORES).flatMap { d =>
       dcount += 1
       //for ((d,dcount) <- data.view.zipWithIndex) {
       val instances = new ArrayBuffer[Instance[A]]
@@ -84,7 +84,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         // Compute a cost for each permissible action
         //          else {
         val costs = permissibleActions.map { l =>
-          (1 to options.NUM_SAMPLES).map { s =>
+          (1 to (if (prob == 1.0) 1 else options.NUM_SAMPLES)).map { s =>
             // Create a copy of the state and apply the action for the cost calculation
             var stateCopy = state
             stateCopy = l(stateCopy)
@@ -101,7 +101,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               sampledEx match {
                 case Some(structure) =>
                   val ll = loss(gold = d, test = structure, sampledActions, l)
-                  if (options.DEBUG) debug.write("Loss on action " + l + " = " + ll + "\n")
+                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f \n")
                   ll
                 case None =>
                   if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
@@ -115,8 +115,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val min = costs.minBy(_ * 1.0)
         val normedCosts = costs.map(_ - min)
         if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
-        if (options.DEBUG) debug.write("Original Costs = " + costs.mkString(", ") + "\n")
-        if (options.DEBUG) debug.write("Normed Costs = " + normedCosts.mkString(", ") + "\n")
+        if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
+        if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
         if (options.DEBUG) {
           val chosen = expert.chooseTransition(d, state)
           if (chosen != permissibleActions(normedCosts.indexOf(0.0))) {
@@ -137,10 +137,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
         System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
       }
-      debug.close()
       allInstances
     }.toArray
-    // instances.toArray
+    debug.close()
+    allData
   }
 
   /**
