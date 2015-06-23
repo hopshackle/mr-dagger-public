@@ -39,6 +39,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val prob = math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       instances ++= collectInstances(data, expert, policy, features, trans, loss, prob)
+      println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
@@ -162,6 +163,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     prob: Double = 1.0): (Option[D], Array[A]) = {
     val actions = new ArrayBuffer[A]
     var state = start
+    var actionsTaken = 0
     while (!trans.isTerminal(state)) {
       val permissibleActions = trans.permissibleActions(state)
       //      assert(!permissibleActions.isEmpty, "There are no permissible actions (of %s) for state:\n%s".format(trans.actions.mkString(", "), state))
@@ -178,6 +180,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
       }
       actions += a
+      actionsTaken += 1
+      if (actionsTaken == 300) {
+        println(s"Unroll terminated at $actionsTaken actions for: ")
+        println(ex)
+        println("Actions Taken: ")
+        println(actions.slice(0, 50))
+      }
       state = a(state)
     }
     (Some(trans.construct(state, ex)), actions.toArray)
@@ -209,15 +218,22 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S) => Map[Int, Double],
     loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).map {
       case (d, decodePair) => //case (d, (prediction, actions)) =>
         val (prediction, actions) = decodePair
         prediction match {
-          case Some(structure) => loss(d, structure, actions)
+          case Some(structure) =>
+            if (options.DEBUG) debug.write("Target = " + d + "\n")
+            if (options.DEBUG) debug.write("Prediction = " + structure + "\n")
+            loss(d, structure, actions)
           case _ => loss.max(d)
         }
     }.foldLeft(0.0)(_ + _)
     val totalScore = score(data.zip(decoded.map(_._1.get)))
+    println(f"Total Score:\t$totalScore%.2f")
+    println(f"Mean F-Score:\t${1.0 - totalLoss / data.size}%.2f")
+    debug.close()
   }
 }
