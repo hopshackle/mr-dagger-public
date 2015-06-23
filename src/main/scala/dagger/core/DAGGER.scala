@@ -76,8 +76,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       var state = trans.init(d)
       // For all actions used to predict the unrolled structure...
       //for (a <- predActions)
+      loss.setSamples(options.NUM_SAMPLES)
       val allInstances = predActions.map { a =>
         // Find all actions permissible for current state
+        if (options.DEBUG) debug.write(state + "\n")
         val permissibleActions = trans.permissibleActions(state)
         // If using caching, check for a stored set of costs for this state
         //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
@@ -90,6 +92,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             // Create a copy of the state and apply the action for the cost calculation
             var stateCopy = state
             stateCopy = l(stateCopy)
+
             if (options.EXPERT_APPROXIMATION) {
               loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
             }
@@ -123,20 +126,20 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           val expertAction = expert.chooseTransition(d, state)
           val minAction = permissibleActions(normedCosts.toList.indexOf(0.0))
           if (expertAction != permissibleActions(normedCosts.indexOf(0.0))) {
-            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction)
+            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
           }
           //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
           debug.write("\n")
         }
         // Construct new training instance with sampled losses
-        if (options.DEBUG) println("Completed sample " + dcount)
         val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
+        if (options.DEBUG) println("Completed instance for action " + a)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
         // Progress to next state in the predicted path
         state = a(state)
-        if (options.DEBUG) println("Generated final instance for  " + dcount)
+        if (options.DEBUG) println("Updated to new state.")
         instance
       }
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
@@ -144,6 +147,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       }
       allInstances
     }.toArray
+    if (options.DEBUG) println("Generated final instance for  " + dcount)
     debug.close()
     allData
   }
