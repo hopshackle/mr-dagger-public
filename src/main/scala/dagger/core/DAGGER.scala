@@ -68,6 +68,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
+      if (options.DEBUG) debug.write("Actions Taken:\n"); predEx foreach (x => debug.write(x + "\n"))
       // Check that the oracle policy is correct
       //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
       //        if (predEx.get == d) numCorrectUnrolls += 1
@@ -119,9 +120,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
         if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
         if (options.DEBUG) {
-          val chosen = expert.chooseTransition(d, state)
-          if (chosen != permissibleActions(normedCosts.indexOf(0.0))) {
-            debug.write("DIFFERS\n")
+          val expertAction = expert.chooseTransition(d, state)
+          val minAction = permissibleActions(normedCosts.toList.indexOf(0.0))
+          if (expertAction != permissibleActions(normedCosts.indexOf(0.0))) {
+            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction)
           }
           //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
           debug.write("\n")
