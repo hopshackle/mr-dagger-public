@@ -68,7 +68,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
-      if (options.DEBUG) debug.write("Actions Taken:\n"); predEx foreach (x => debug.write(x + "\n"))
+      if (options.DEBUG) debug.write("Actions Taken:\n"); predActions foreach (x => debug.write(x + "\n"))
       // Check that the oracle policy is correct
       //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
       //        if (predEx.get == d) numCorrectUnrolls += 1
@@ -92,9 +92,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val costs = permissibleActions.map { l =>
           (1 to (if (prob == 1.0) 1 else options.NUM_SAMPLES)).map { s =>
             // Create a copy of the state and apply the action for the cost calculation
+            if (options.DEBUG) println("Starting Action: " + l)
             var stateCopy = state
             stateCopy = l(stateCopy)
-
+            if (options.DEBUG) println("Applied Action: " + l)
             if (options.EXPERT_APPROXIMATION) {
               loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
             }
@@ -108,10 +109,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               sampledEx match {
                 case Some(structure) =>
                   val ll = loss(gold = d, test = structure, sampledActions, l)
-                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f \n")
+                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f")
+                  if (options.DEBUG) println(f"Loss on action $l = $ll%.3f")
                   ll
                 case None =>
-                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d))
+                  if (options.DEBUG) println("Failed unroll, loss = " + loss.max(d))
                   loss.max(d)
               }
             }
