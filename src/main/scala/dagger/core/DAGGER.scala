@@ -166,7 +166,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val actions = new ArrayBuffer[A]
     var state = start
     var actionsTaken = 0
-    while (!trans.isTerminal(state)) {
+    while (actionsTaken < 300 && !trans.isTerminal(state)) {
       val permissibleActions = trans.permissibleActions(state)
       //      assert(!permissibleActions.isEmpty, "There are no permissible actions (of %s) for state:\n%s".format(trans.actions.mkString(", "), state))
       if (permissibleActions.isEmpty) {
