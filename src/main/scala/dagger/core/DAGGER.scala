@@ -79,10 +79,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       loss.setSamples(options.NUM_SAMPLES)
       val allInstances = predActions.map { a =>
         // Find all actions permissible for current state
-        if (options.DEBUG) debug.write(state + "\n")
-        if (options.DEBUG) println("Starting Action: " + a)
+        if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
+        //       if (options.DEBUG) println("Starting Expert Action: " + a)
         val permissibleActions = trans.permissibleActions(state)
-        if (options.DEBUG) println("Permissible Actions: " + permissibleActions.size)
+        //       if (options.DEBUG) println("Permissible Actions: " + permissibleActions.size)
         // If using caching, check for a stored set of costs for this state
         //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
         //            cache(state)
@@ -92,10 +92,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val costs = permissibleActions.map { l =>
           (1 to (if (prob == 1.0) 1 else options.NUM_SAMPLES)).map { s =>
             // Create a copy of the state and apply the action for the cost calculation
-            if (options.DEBUG) println("Starting Action: " + l)
+            //          if (options.DEBUG) println("Starting Action: " + l)
             var stateCopy = state
             stateCopy = l(stateCopy)
-            if (options.DEBUG) println("Applied Action: " + l)
+            //           if (options.DEBUG) println("Applied Action: " + l)
             if (options.EXPERT_APPROXIMATION) {
               loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
             }
@@ -106,22 +106,24 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               val (sampledEx, sampledActions) = unroll(d, expert, policy, stateCopy, trans, features, prob = prob)
               // If the unrolling is successful, calculate loss with respect to gold structure
               // Otherwise use the max cost
+              //           if (options.DEBUG) println("Unrolled Action: " + l)
               sampledEx match {
                 case Some(structure) =>
                   val ll = loss(gold = d, test = structure, sampledActions, l)
-                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f")
-                  if (options.DEBUG) println(f"Loss on action $l = $ll%.3f")
+                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
+                  //              if (options.DEBUG) println(f"Loss on action $l = $ll%.3f")
                   ll
                 case None =>
-                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d))
-                  if (options.DEBUG) println("Failed unroll, loss = " + loss.max(d))
+                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                  //              if (options.DEBUG) println("Failed unroll, loss = " + loss.max(d))
                   loss.max(d)
               }
             }
           }.foldLeft(0.0)(_ + _) // Sum the label loss for all samples
           //            }
         }
-        // Reduce all costs until the min cost is 0
+        // Reduce all costs until the min cost is 0cat run0101.txt
+
         val min = costs.minBy(_ * 1.0)
         val normedCosts = costs.map(_ - min)
         if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
@@ -129,22 +131,21 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
         if (options.DEBUG) {
           val expertAction = expert.chooseTransition(d, state)
-          val minAction = permissibleActions(normedCosts.toList.indexOf(0.0))
-          if (expertAction != permissibleActions(normedCosts.indexOf(0.0))) {
-            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
-          }
+          val minAction = permissibleActions(normedCosts.indexOf(0.0))
+          debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
           //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
           debug.write("\n")
+          debug.flush()
         }
         // Construct new training instance with sampled losses
         val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
-        if (options.DEBUG) println("Completed instance for action " + a)
+        //       if (options.DEBUG) println("Completed instance for action " + a)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
         // Progress to next state in the predicted path
         state = a(state)
-        if (options.DEBUG) println("Updated to new state.")
+        //       if (options.DEBUG) println("Updated to new state.")
         instance
       }
       if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
@@ -177,8 +178,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val actions = new ArrayBuffer[A]
     var state = start
     var actionsTaken = 0
-    while (actionsTaken < 300 && !trans.isTerminal(state)) {
+    if (options.DEBUG) println("Unrolling...")
+    if (options.DEBUG) println("Terminal State: " + trans.isTerminal(state))
+    while (!trans.isTerminal(state) && actionsTaken < 300) {
+      if (options.DEBUG) println("About to calculate permissible actions.")
       val permissibleActions = trans.permissibleActions(state)
+      if (options.DEBUG) println("Permissible Actions: " + permissibleActions.size)
       //      assert(!permissibleActions.isEmpty, "There are no permissible actions (of %s) for state:\n%s".format(trans.actions.mkString(", "), state))
       if (permissibleActions.isEmpty) {
         return (None, actions.toArray)
@@ -192,8 +197,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
         }
       }
+
       actions += a
       actionsTaken += 1
+      //     if (options.DEBUG) println("Unroll Action: " + actionsTaken + " : " + a)
       if (actionsTaken == 300) {
         println(s"Unroll terminated at $actionsTaken actions for: ")
         println(ex)
