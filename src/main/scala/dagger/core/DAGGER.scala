@@ -88,7 +88,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         // Compute a cost for each permissible action
         //          else {
         val costs = permissibleActions.map { l =>
-          (1 to (if (prob == 1.0) 1 else options.NUM_SAMPLES)).map { s =>
+          (1 to options.NUM_SAMPLES).map { s =>
             // Create a copy of the state and apply the action for the cost calculation
             var stateCopy = state
             stateCopy = l(stateCopy)
@@ -222,6 +222,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S) => Map[Int, Double],
     loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
+        val timer = new dagger.util.Timer
+    timer.start()
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).map {
@@ -238,6 +240,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val totalScore = score(data.zip(decoded.map(_._1.get)))
     println(f"Total Score:\t$totalScore%.2f")
     println(f"Mean F-Score:\t${1.0 - totalLoss / data.size}%.2f")
+    println(s"Time taken for validation:\t$timer.toString")
     debug.close()
   }
 }
