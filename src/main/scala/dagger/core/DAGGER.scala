@@ -50,7 +50,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
-    features: (D, S) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S], prob: Double = 1.0): Array[Instance[A]] = {
+    features: (D, S) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S],
+    prob: Double = 1.0): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
     // Compute the probability of choosing the oracle policy in this round
@@ -60,8 +61,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_collectInstances_debug." + prob + ".txt")
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_collectInstances_debug." + f"$prob%.3f" + ".txt")
     var dcount = 0
+    var lossOnTestSet = List[Double]()
     val allData = fork(data, options.NUM_CORES).flatMap { d =>
       dcount += 1
       //for ((d,dcount) <- data.view.zipWithIndex) {
@@ -69,6 +71,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
       if (options.DEBUG) debug.write("Actions Taken:\n"); predActions foreach (x => debug.write(x + "\n"))
+      val totalLoss = predEx match {
+        case None => 1.0
+        case Some(output) => loss(output, d, predActions)
+      }
+      lossOnTestSet = totalLoss :: lossOnTestSet
+      if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
       // Check that the oracle policy is correct
       //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
       //        if (predEx.get == d) numCorrectUnrolls += 1
@@ -99,7 +107,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               trans.approximateLoss(datum = d, state = state, action = l)
             } else {
               // Unroll from current state until completion
-              val (sampledEx, sampledActions) = unroll(d, expert, policy, stateCopy, trans, features, prob = prob)
+              val (sampledEx, sampledActions) = unroll(d, expert, policy, stateCopy, trans, features, prob)
               // If the unrolling is successful, calculate loss with respect to gold structure
               // Otherwise use the max cost
               sampledEx match {
@@ -144,6 +152,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       }
       allInstances
     }.toArray
+    if (options.DEBUG) debug.write(f"Mean Loss on test set:\t ${(lossOnTestSet reduce (_ + _)) / lossOnTestSet.size}%.3f")
     debug.close()
     allData
   }
@@ -186,10 +195,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       actions += a
       actionsTaken += 1
       if (actionsTaken == 300) {
-        println(s"Unroll terminated at $actionsTaken actions for: ")
-        println(ex)
-        println("Actions Taken: ")
-        println(actions.slice(0, 50))
+        println(s"Unroll terminated at $actionsTaken actions")
+ //       println(ex)
+  //      println("Actions Taken: ")
+ //       println(actions.slice(0, 50))
       }
       state = a(state)
     }
@@ -222,7 +231,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S) => Map[Int, Double],
     loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
-        val timer = new dagger.util.Timer
+    val timer = new dagger.util.Timer
     timer.start()
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
@@ -240,7 +249,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val totalScore = score(data.zip(decoded.map(_._1.get)))
     println(f"Total Score:\t$totalScore%.2f")
     println(f"Mean F-Score:\t${1.0 - totalLoss / data.size}%.2f")
-    println(s"Time taken for validation:\t$timer.toString")
+    println(s"Time taken for validation:\t$timer")
     debug.close()
   }
 }
