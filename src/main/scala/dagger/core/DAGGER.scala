@@ -69,9 +69,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       //for ((d,dcount) <- data.view.zipWithIndex) {
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
-      val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
+      val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
       if (options.DEBUG) debug.write("Initial State:\n" + trans.init(d) + "\n")
-      if (options.DEBUG) debug.write("Actions Taken:\n"); predActions foreach (x => debug.write(x + "\n"))
+      if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
       val totalLoss = predEx match {
         case None => 1.0
         case Some(output) => loss(output, d, predActions)
@@ -108,7 +108,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               trans.approximateLoss(datum = d, state = state, action = l)
             } else {
               // Unroll from current state until completion
-              val (sampledEx, sampledActions) = unroll(d, expert, policy, stateCopy, trans, features, prob)
+              val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, features, prob)
               // If the unrolling is successful, calculate loss with respect to gold structure
               // Otherwise use the max cost
               sampledEx match {
@@ -174,16 +174,17 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     start: S, trans: TransitionSystem[D, A, S],
     featureFunction: (D, S) => Map[Int, Double],
-    prob: Double = 1.0): (Option[D], Array[A]) = {
+    prob: Double = 1.0): (Option[D], Array[A], Array[Boolean]) = {
     val actions = new ArrayBuffer[A]
+    val expertUsed = new ArrayBuffer[Boolean]
     var state = start
     var actionsTaken = 0
     while (!trans.isTerminal(state) && actionsTaken < 300) {
       val permissibleActions = trans.permissibleActions(state)
       if (permissibleActions.isEmpty) {
-        return (None, actions.toArray)
+        return (None, actions.toArray, expertUsed.toArray)
       }
-      val policy = if (random.nextDouble() <= prob) expertPolicy else classifierPolicy
+      val policy = if (random.nextDouble() <= prob) {expertUsed += true; expertPolicy} else {expertUsed += false; classifierPolicy}
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
@@ -203,7 +204,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       }
       state = a(state)
     }
-    (Some(trans.construct(state, ex)), actions.toArray)
+    (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
 
   def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = options.CLASSIFIER match {
@@ -219,7 +220,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     trans: TransitionSystem[D, A, S], featureFunction: (D, S) => Map[Int, Double]): (Option[D], Array[A]) = {
-    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0)
+    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match {case (a, b, c) => (a, b)}
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
