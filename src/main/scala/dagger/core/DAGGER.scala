@@ -70,6 +70,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
+      if (options.DEBUG) debug.write("Initial State:\n" + trans.init(d) + "\n")
       if (options.DEBUG) debug.write("Actions Taken:\n"); predActions foreach (x => debug.write(x + "\n"))
       val totalLoss = predEx match {
         case None => 1.0
