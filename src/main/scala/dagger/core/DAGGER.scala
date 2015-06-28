@@ -70,7 +70,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val instances = new ArrayBuffer[Instance[A]]
       // Use policies to fully construct (unroll) instance from start state
       val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
-      if (options.DEBUG) debug.write("Initial State:\n" + trans.init(d) + "\n")
+      if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
       if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
       val totalLoss = predEx match {
         case None => 1.0
@@ -140,7 +140,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           debug.flush()
         }
         // Construct new training instance with sampled losses
-        val instance = new Instance[A](features(d, state), permissibleActions, normedCosts)
+        val allFeatures = features(d, state)
+        val instance = new Instance[A](allFeatures, permissibleActions, normedCosts)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
@@ -154,7 +155,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       allInstances
     }.toArray
     if (options.DEBUG) debug.write(f"Mean Loss on test set:\t ${(lossOnTestSet reduce (_ + _)) / lossOnTestSet.size}%.3f")
-    debug.close()
+    debug.close
     allData
   }
 
@@ -184,7 +185,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (permissibleActions.isEmpty) {
         return (None, actions.toArray, expertUsed.toArray)
       }
-      val policy = if (random.nextDouble() <= prob) {expertUsed += true; expertPolicy} else {expertUsed += false; classifierPolicy}
+      val policy = if (random.nextDouble() <= prob) { expertUsed += true; expertPolicy } else { expertUsed += false; classifierPolicy }
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
@@ -198,9 +199,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       actionsTaken += 1
       if (actionsTaken == 300) {
         println(s"Unroll terminated at $actionsTaken actions")
- //       println(ex)
-  //      println("Actions Taken: ")
- //       println(actions.slice(0, 50))
+        //       println(ex)
+        //      println("Actions Taken: ")
+        //       println(actions.slice(0, 50))
       }
       state = a(state)
     }
@@ -220,7 +221,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     trans: TransitionSystem[D, A, S], featureFunction: (D, S) => Map[Int, Double]): (Option[D], Array[A]) = {
-    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match {case (a, b, c) => (a, b)}
+    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match { case (a, b, c) => (a, b) }
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
