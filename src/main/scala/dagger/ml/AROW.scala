@@ -147,10 +147,13 @@ object AROW {
         if (instance.costOf(maxLabel) > 0) {
           errors += 1
 
+          // correctLabels is an array of all those with cost of 0.0
+          // so this line produces tuple of correct label with the lowest score from the classifier (i.e. the least good correct prediction)
           val (minCorrectLabel, minCorrectScore) = instance.correctLabels.map(l => (l, prediction.label2score(l))).toArray.sortBy(_._2).head
           val zVectorPredicted = new HashMap[Int, Double]()
           val zVectorMinCorrect = new HashMap[Int, Double]()
 
+          // 
           for (feat <- instance.featureVector.keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxLabel)) {

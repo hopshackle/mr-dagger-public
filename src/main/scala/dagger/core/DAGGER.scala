@@ -189,7 +189,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
+          // TODO: This line requires an Instance to have a feature set for each action
           val instance = new Instance[A](featureFunction(ex, state), permissibleActions, permissibleActions.map(_ => 0.0))
+          // TODO: Then in predict we use the corresponding feature set to value each action
           val prediction = y.predict(ex, instance, state)
           if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
         }
