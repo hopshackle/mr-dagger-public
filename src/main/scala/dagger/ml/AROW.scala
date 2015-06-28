@@ -1,6 +1,6 @@
 package dagger.ml
 
-import java.io.{File, FileWriter}
+import java.io.{ File, FileWriter }
 
 import collection.mutable.HashMap
 // import java.util.HashMap
@@ -9,7 +9,6 @@ import scala.util.Random
 //import collection.immutable.Map
 //import scala.collection.JavaConversions.mapAsScalaMap
 
-
 /**
  * Created with IntelliJ IDEA.
  * User: narad
@@ -17,30 +16,31 @@ import scala.util.Random
  * Time: 12:13 PM
  */
 case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]] = new HashMap[T, HashMap[Int, Double]](),
-                                       variances: HashMap[T, HashMap[Int, Double]] = new HashMap[T, HashMap[Int, Double]]())
+  variances: HashMap[T, HashMap[Int, Double]] = new HashMap[T, HashMap[Int, Double]]())
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
-  //  println("instance is null ?" + instance == null)
-  //  println("size:" + instance.labels.size)
-    val scores = instance.labels.map { label =>
-      if (!weights.contains(label)) weights(label) = new HashMap[Int, Double]
-      label -> dotMap(instance.featureVector, weights(label))
-    }.toMap
-    Prediction[T](label2score = scores)
+    //  println("instance is null ?" + instance == null)
+    //  println("size:" + instance.labels.size)
+
+    val scores = (instance.labels zip instance.featureVector) map {
+      case (label, feats) =>
+        if (!weights.contains(label)) weights(label) = new HashMap[Int, Double]
+        label -> dotMap(feats, weights(label))
+    }
+    Prediction[T](label2score = scores.toMap)
   }
 
-//
-//    val scores: Map[T, Double] = if (weights.isEmpty) {
-//      // Actually, this if shouldn't be needed: all weights should be initialized to 0 so the dotMap always works
-//      instance.labels.map { label => label -> 0.0 }.toMap
-//    }
-//    else {
-//      instance.labels.map { label =>
-//        label -> dotMap(instance.featureVector, weights(label))
-//      }.toMap
-//    }
-
+  //
+  //    val scores: Map[T, Double] = if (weights.isEmpty) {
+  //      // Actually, this if shouldn't be needed: all weights should be initialized to 0 so the dotMap always works
+  //      instance.labels.map { label => label -> 0.0 }.toMap
+  //    }
+  //    else {
+  //      instance.labels.map { label =>
+  //        label -> dotMap(instance.featureVector, weights(label))
+  //      }.toMap
+  //    }
 
   def weightOf(a: T, p: Int): Double = weights(a).getOrElse(p, 0.0)
 
@@ -49,8 +49,8 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]]
     val file = new File(filename)
     if (!file.getParentFile.exists()) file.getParentFile.mkdirs()
     val out = new FileWriter(filename)
-    for (label <- weights.keys; (f,w) <- weights(label)) {
-        out.write(label + "\t" + f + "\t" + w + "\n")
+    for (label <- weights.keys; (f, w) <- weights(label)) {
+      out.write(label + "\t" + f + "\t" + w + "\n")
     }
     out.close()
   }
@@ -59,7 +59,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]]
 object AROWClassifier {
 
   def empty[T: ClassTag](labels: Array[T] = Array()): AROWClassifier[T] = {
-    val weights   = new HashMap[T, HashMap[Int, Double]]
+    val weights = new HashMap[T, HashMap[Int, Double]]
     val variances = new HashMap[T, HashMap[Int, Double]]
     for (l <- labels) {
       if (!weights.contains(l)) weights(l) = new HashMap[Int, Double]
@@ -77,24 +77,23 @@ object AROWClassifier {
       val label = actionMap(cols(0))
       val f = cols(1).toInt
       val w = cols(2).toDouble
-      if (!weights.contains(label)) weights(label) = new HashMap[Int,Double]
+      if (!weights.contains(label)) weights(label) = new HashMap[Int, Double]
       weights(label)(f) = w
     }
     AROWClassifier(weights, variances)
   }
 
-//  def actionMap[T](str: String): T = {
-//    val matched = str match {
-//      case "MentionAction" => MentionAction
-//      case "NoMentionAction" => NoMentionAction
-//      case "CorefLinkAction" => CorefLinkAction
-//      case "CorefNoLinkAction" => CorefNoLinkAction
-//      case "CorefNewClusterAction" => CorefNewClusterAction
-//    }
-//    matched.asInstanceOf[T]
-//  }
+  //  def actionMap[T](str: String): T = {
+  //    val matched = str match {
+  //      case "MentionAction" => MentionAction
+  //      case "NoMentionAction" => NoMentionAction
+  //      case "CorefLinkAction" => CorefLinkAction
+  //      case "CorefNoLinkAction" => CorefNoLinkAction
+  //      case "CorefNewClusterAction" => CorefNewClusterAction
+  //    }
+  //    matched.asInstanceOf[T]
+  //  }
 }
-
 
 object AROW {
 
@@ -105,10 +104,9 @@ object AROW {
       case Some(arow) => arow
       case None => AROWClassifier.empty[T](labels = labels)
     }
-    val smoothing = if (options.TUNE_REGULARIZER)  {
+    val smoothing = if (options.TUNE_REGULARIZER) {
       tuneSmoothingParameter(data = pruned, labels = labels, init = model, random)
-    }
-    else {
+    } else {
       options.SMOOTHING
     }
     trainFromClassifier(
@@ -123,9 +121,9 @@ object AROW {
   }
 
   private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], labels: Array[T], rounds: Int, smoothing: Double = 1.0, shuffle: Boolean = true,
-                                 averaging: Boolean = true, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random): AROWClassifier[T] = {
+    averaging: Boolean = true, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random): AROWClassifier[T] = {
     // Initialize weight and variance vectors
-    val weightVectors   = init.weights // new HashMap[T, HashMap[Int, Double]]()
+    val weightVectors = init.weights // new HashMap[T, HashMap[Int, Double]]()
     val varianceVectors = init.variances //new HashMap[T, HashMap[Int, Double]]()
 
     // Begin training loop
@@ -154,25 +152,28 @@ object AROW {
           val zVectorMinCorrect = new HashMap[Int, Double]()
 
           // 
-          for (feat <- instance.featureVector.keys) {
+          val labelList = instance.labels
+          val iMaxLabel = labelList.indexOf(maxLabel)
+          val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
+          for (feat <- instance.featureVector(iMaxLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxLabel)) {
-              zVectorPredicted(feat) = instance.featureVector(feat) * varianceVectors(maxLabel).getOrElse(feat, 1.0)
+              zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxLabel).getOrElse(feat, 1.0)
+            } else {
+              zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
             }
-            else {
-              zVectorPredicted(feat) = instance.featureVector(feat)
-            }
+          }
+          for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(minCorrectLabel)) {
-              zVectorMinCorrect(feat) = instance.featureVector(feat) * varianceVectors(minCorrectLabel).getOrElse(feat, 1.0)
-            }
-            else {
-              zVectorMinCorrect(feat) = instance.featureVector(feat)
+              zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectLabel).getOrElse(feat, 1.0)
+            } else {
+              zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
             }
           }
 
-          val preDot = dotMap(instance.featureVector, zVectorPredicted)
-          val minDot = dotMap(instance.featureVector, zVectorMinCorrect)
+          val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
+          val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
           val confidence = preDot + minDot
 
           val beta = 1.0 / (confidence + smoothing)
@@ -196,10 +197,12 @@ object AROW {
           add(weightVectors(maxLabel), zVectorPredicted, -1.0 * alpha)
           add(weightVectors(minCorrectLabel), zVectorMinCorrect, alpha)
 
-          for (feat <- instance.featureVector.keys) {
+          for (feat <- instance.featureVector(iMaxLabel).keys) {
             // AV: you can save yourself this if by initializing them in the beginning
             if (!varianceVectors.contains(maxLabel)) varianceVectors(maxLabel) = new HashMap[Int, Double]()
             varianceVectors(maxLabel)(feat) = varianceVectors(maxLabel).getOrElse(feat, 1.0) - beta * math.pow(zVectorPredicted(feat), 2)
+          }
+          for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
             // AV: you can save yourself this if by initializing them in the beginning
             if (!varianceVectors.contains(minCorrectLabel)) varianceVectors(minCorrectLabel) = new HashMap[Int, Double]()
             varianceVectors(minCorrectLabel)(feat) = varianceVectors(minCorrectLabel).getOrElse(feat, 1.0) - beta * math.pow(zVectorMinCorrect(feat), 2)
@@ -232,29 +235,32 @@ object AROW {
   }
 
   def add(v1: HashMap[Int, Double], v2: HashMap[Int, Double], damp: Double = 1.0) = {
-    for ((key,value) <- v2) v1(key) = v1.getOrElse(key,0.0) + value * damp
+    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0) + value * damp
   }
 
   def dotMap(v1: collection.Map[Int, Double], v2: collection.Map[Int, Double]): Double = {
-    v1.foldLeft(0.0){ case(sum, (f,v)) => sum + v * v2.getOrElse(f, 0.0)}
+    v1.foldLeft(0.0) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0) }
   }
 
   // Remove rare features
   def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Iterable[Instance[T]] = {
     if (count == 0) return data
     val fcounts = new collection.mutable.HashMap[Int, Double].withDefaultValue(0.0)
-    for (d <- data; f <- d.featureVector) fcounts(f._1) = fcounts(f._1) + f._2
-    val rareFeats = fcounts.collect { case (k, v) if v > count => k}.toSet
-    data.map(d => d.copy(feats = d.featureVector.filter{ case(k,v) => rareFeats.contains(k) }))
+    for (d <- data; m <- d.featureVector; f <- m) fcounts(f._1) = fcounts(f._1) + f._2
+    val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
+    val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map 
+      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })
+    )))
+    out
   }
 
   def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], labels: Array[T], init: AROWClassifier[T], random: Random): Double = {
     val (rtrain, rdev) = random.shuffle(data).partition(x => random.nextDouble() < 0.9)
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad
-    val best = (-3 to 3).map(math.pow(10,_)).map { s =>
+    val best = (-3 to 3).map(math.pow(10, _)).map { s =>
       val classifier = trainFromClassifier(rtrain, labels, rounds = 10, smoothing = s, printInterval = 0, init = init, random = random)
-      val cost = rdev.map ( d => d.costOf(classifier.predict(d).maxLabels.head)).foldLeft(0.0)(_+_)
+      val cost = rdev.map(d => d.costOf(classifier.predict(d).maxLabels.head)).foldLeft(0.0)(_ + _)
       println("Cost for smoothing parameter = %.4f is %.2f\n".format(s, cost))
       (s, cost)
     }.sortBy(_._2).head._1
