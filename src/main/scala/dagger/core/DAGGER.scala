@@ -22,7 +22,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def train(data: Iterable[D],
     expert: HeuristicPolicy[D, A, S],
-    features: (D, S) => Map[Int, Double],
+    features: (D, S, A) => Map[Int, Double],
     trans: TransitionSystem[D, A, S],
     loss: LossFunction[D, A, S], //(D, D) => Double,
     dev: Iterable[D] = Iterable.empty,
@@ -50,7 +50,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
-    features: (D, S) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S],
+    features: (D, S, A) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S],
     prob: Double = 1.0): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
@@ -140,8 +140,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           debug.flush()
         }
         // Construct new training instance with sampled losses
-        val allFeatures = features(d, state)
-        val instance = new Instance[A](allFeatures, permissibleActions, normedCosts)
+        val allFeatures = permissibleActions map (a => features(d, state, a))
+        val instance = new Instance[A](allFeatures.toList, permissibleActions, normedCosts)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
@@ -174,7 +174,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expertPolicy: HeuristicPolicy[D, A, S],
     classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     start: S, trans: TransitionSystem[D, A, S],
-    featureFunction: (D, S) => Map[Int, Double],
+    featureFunction: (D, S, A) => Map[Int, Double],
     prob: Double = 1.0): (Option[D], Array[A], Array[Boolean]) = {
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]
@@ -189,9 +189,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
-          // TODO: This line requires an Instance to have a feature set for each action
-          val instance = new Instance[A](featureFunction(ex, state), permissibleActions, permissibleActions.map(_ => 0.0))
-          // TODO: Then in predict we use the corresponding feature set to value each action
+          val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList, permissibleActions, permissibleActions.map(_ => 0.0))
           val prediction = y.predict(ex, instance, state)
           if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
         }
@@ -222,7 +220,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
-    trans: TransitionSystem[D, A, S], featureFunction: (D, S) => Map[Int, Double]): (Option[D], Array[A]) = {
+    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => Map[Int, Double]): (Option[D], Array[A]) = {
     unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match { case (a, b, c) => (a, b) }
   }
 
@@ -233,7 +231,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S) => Map[Int, Double],
+  def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
     loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
     val timer = new dagger.util.Timer

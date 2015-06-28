@@ -18,7 +18,7 @@ import scala.reflect.ClassTag
  */
 object OracleExtractor {
 
-  def instances[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionState : ClassTag] (data: Iterable[D], trans: TransitionSystem[D, A, S],features: (D, S) => Map[Int, Double], printInterval: Int = 1000, numCores: Int = 1): Iterable[Instance[A]] = {
+  def instances[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionState : ClassTag] (data: Iterable[D], trans: TransitionSystem[D, A, S],features: (D, S, A) => Map[Int, Double], printInterval: Int = 1000, numCores: Int = 1): Iterable[Instance[A]] = {
    // val instances = new ArrayBuffer[Instance[A]]
     val timer = new dagger.util.Timer
     timer.start()
@@ -32,7 +32,7 @@ object OracleExtractor {
         val a = trans.chooseTransition(d, s)
         assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
         val costs = permissibleActions.map(pa => if (pa == a) 0.0 else 1.0)
-        tinstances += new Instance[A](features(d, s), permissibleActions, costs)
+        tinstances += new Instance[A]((permissibleActions map (a => features(d, s, a))).toList, permissibleActions, costs)
         s = a(s)
       }
       tinstances
