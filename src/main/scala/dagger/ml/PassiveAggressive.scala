@@ -8,7 +8,6 @@ import scala.reflect.ClassTag
 import gnu.trove._
 import scala.util.Random
 
-
 /**
  * Created by narad on 4/6/15.
  */
@@ -17,11 +16,11 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Double
   def predict(instance: Instance[T]): Prediction[T] = {
     val scores: Map[T, Double] = if (weights.isEmpty) {
       instance.labels.map { label => label -> 1.0 }.toMap
-    }
-    else {
-      instance.labels.map { label =>
-        label -> dotMap(instance.featureVector, weights(label))
-      }.toMap
+    } else {
+      ((instance.labels.toList.zipWithIndex) map {
+        case (label, i) =>
+          label -> dotMap(instance.featureVector(i), weights(label))
+      }).toMap
     }
     Prediction[T](label2score = scores)
   }
@@ -29,26 +28,21 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Double
   def weightOf(a: T, p: Int): Double = {
     if (weights.contains(a)) {
       weights(a).get(p).get
-    }
-    else {
+    } else {
       0.0
     }
   }
 
   def writeToFile(filename: String) = {
     val out = new FileWriter(filename)
-    for (label <- weights.keys; (f,w) <- weights(label)) {
+    for (label <- weights.keys; (f, w) <- weights(label)) {
       out.write(label + "\t" + f + "\t" + w + "\n")
     }
     out.close()
   }
 }
 
-
-
-
 object PassiveAggressive {
-
 
   def train[T: ClassTag](data: Iterable[Instance[T]], labels: Seq[T], rate: Double = 0.1, random: Random, options: AROWOptions, verbose: Boolean = false): PassiveAggressiveClassifier[T] = {
     val smoothing = options.SMOOTHING
@@ -79,20 +73,25 @@ object PassiveAggressive {
 
           var minCorrectScore = instance.correctCost
           var minCorrectLabel = instance.correctLabels.head
+          val labelList = instance.labels
+
           for (label <- Array(minCorrectLabel)) {
-            val score = dotMap(instance.featureVector, weightVectors(label))
+            val iLabel = labelList.indexOf(label)
+            val score = dotMap(instance.featureVector(iLabel), weightVectors(label))
             if (score < minCorrectScore) {
               minCorrectScore = score
               minCorrectLabel = label
             }
           }
 
+          val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
           val loss = maxScore - minCorrectScore + math.sqrt(instance.costOf(maxLabel))
-          val norm = 2 * (dotMap(instance.featureVector, instance.featureVector))
+          val norm = 2 * (dotMap(instance.featureVector(iMinCorrectLabel), instance.featureVector(iMinCorrectLabel)))
           val factor = loss / (norm + (1.0 / (2 * smoothing)))
 
-          add(weightVectors(maxLabel), instance.featureVector, -1.0 * factor)
-          add(weightVectors(minCorrectLabel), instance.featureVector, factor)
+          val iMaxLabel = labelList.indexOf(maxLabel)
+          add(weightVectors(maxLabel), instance.featureVector(iMaxLabel), -1.0 * factor)
+          add(weightVectors(minCorrectLabel), instance.featureVector(iMinCorrectLabel), factor)
         }
       }
       classifier = new PassiveAggressiveClassifier[T](weightVectors)
@@ -120,11 +119,11 @@ object PassiveAggressive {
   }
 
   def add(v1: HashMap[Int, Double], v2: collection.Map[Int, Double], damp: Double = 1.0) = {
-    for ((key,value) <- v2) v1(key) = v1.getOrElse(key,0.0) + value * damp
+    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0) + value * damp
   }
 
   def dotMap(v1: collection.Map[Int, Double], v2: collection.Map[Int, Double]): Double = {
-    v1.foldLeft(0.0){ case(sum, (f,v)) => sum + v * v2.getOrElse(f, 0.0)}
+    v1.foldLeft(0.0) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0) }
   }
 
 }

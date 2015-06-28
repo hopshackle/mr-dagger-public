@@ -8,7 +8,6 @@ import scala.reflect.ClassTag
 import gnu.trove._
 import scala.util.Random
 
-
 /**
  * Created by narad on 4/6/15.
  */
@@ -17,11 +16,11 @@ class PerceptronClassifier[T](val weights: HashMap[T, HashMap[Int, Double]]) ext
   def predict(instance: Instance[T]): Prediction[T] = {
     val scores: Map[T, Double] = if (weights.isEmpty) {
       instance.labels.map { label => label -> 1.0 }.toMap
-    }
-    else {
-      instance.labels.map { label =>
-        label -> dotMap(instance.featureVector, weights(label))
-      }.toMap
+    } else {
+      ((instance.labels.toList.zipWithIndex) map {
+        case (label, i) =>
+          label -> dotMap(instance.featureVector(i), weights(label))
+      }).toMap
     }
     Prediction[T](label2score = scores)
   }
@@ -29,26 +28,21 @@ class PerceptronClassifier[T](val weights: HashMap[T, HashMap[Int, Double]]) ext
   def weightOf(a: T, p: Int): Double = {
     if (weights.contains(a)) {
       weights(a).get(p).get
-    }
-    else {
+    } else {
       0.0
     }
   }
 
   def writeToFile(filename: String) = {
     val out = new FileWriter(filename)
-    for (label <- weights.keys; (f,w) <- weights(label)) {
+    for (label <- weights.keys; (f, w) <- weights(label)) {
       out.write(label + "\t" + f + "\t" + w + "\n")
     }
     out.close()
   }
 }
 
-
-
-
 object Perceptron {
-
 
   def train[T: ClassTag](data: Iterable[Instance[T]], labels: Seq[T], rate: Double = 0.1, random: Random, options: AROWOptions, verbose: Boolean = false): PerceptronClassifier[T] = {
     // Initialize weight and variance vectors
@@ -71,6 +65,9 @@ object Perceptron {
         val prediction = classifier.predict(instance)
         val maxLabel = prediction.randomMaxLabel(random)
         val maxScore = prediction.maxScore
+        val labelList = instance.labels
+
+        val iMaxLabel = labelList.indexOf(maxLabel)
         val icost = instance.costOf(maxLabel)
         if (instance.costOf(maxLabel) > 0) {
           errors += 1
@@ -79,25 +76,25 @@ object Perceptron {
           var minCorrectScore = instance.correctCost
           var minCorrectLabel = instance.correctLabels.head
           for (label <- Array(minCorrectLabel)) {
-            val score = dotMap(instance.featureVector, weightVectors(label))
+            val iLabel = labelList.indexOf(label)
+            val score = dotMap(instance.featureVector(iLabel), weightVectors(label))
             if (score < minCorrectScore) {
               minCorrectScore = score
               minCorrectLabel = label
             }
           }
 
-
           val zVectorPredicted = new HashMap[Int, Double]()
           val zVectorMinCorrect = new HashMap[Int, Double]()
 
-          val preDot = dotMap(instance.featureVector, zVectorPredicted)
-          val minDot = dotMap(instance.featureVector, zVectorMinCorrect)
+          val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
+          val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
+          val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
 
           val confidence = preDot + minDot
 
           val loss = maxScore - minCorrectScore + math.sqrt(instance.costOf(maxLabel))
           val alpha = loss * rate
-
 
           add(weightVectors(maxLabel), zVectorPredicted, -1.0 * alpha)
           add(weightVectors(minCorrectLabel), zVectorMinCorrect, alpha)
@@ -129,11 +126,11 @@ object Perceptron {
   }
 
   def add(v1: HashMap[Int, Double], v2: HashMap[Int, Double], damp: Double = 1.0) = {
-    for ((key,value) <- v2) v1(key) = v1.getOrElse(key,0.0) + value * damp
+    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0) + value * damp
   }
 
   def dotMap(v1: collection.Map[Int, Double], v2: collection.Map[Int, Double]): Double = {
-    v1.foldLeft(0.0){ case(sum, (f,v)) => sum + v * v2.getOrElse(f, 0.0)}
+    v1.foldLeft(0.0) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0) }
   }
 
 }
