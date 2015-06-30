@@ -26,7 +26,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     trans: TransitionSystem[D, A, S],
     loss: LossFunction[D, A, S], //(D, D) => Double,
     dev: Iterable[D] = Iterable.empty,
-    score: Iterable[(D, D)] => Double): MultiClassClassifier[A] = {
+    score: Iterable[(D, D)] => Double,
+    utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
@@ -39,7 +40,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val prob = math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      instances ++= collectInstances(data, expert, policy, features, trans, loss, prob)
+      instances ++= collectInstances(data, expert, policy, features, trans, loss, prob, i, utilityFunction)
       println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
@@ -52,7 +53,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
     features: (D, S, A) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S],
-    prob: Double = 1.0): Array[Instance[A]] = {
+    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, Int, Int, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
     // Compute the probability of choosing the oracle policy in this round
@@ -75,7 +76,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
       val totalLoss = predEx match {
         case None => 1.0
-        case Some(output) => loss(output, d, predActions)
+        case Some(output) => utilityFunction(options, iteration, dcount, output); loss(output, d, predActions)
       }
       lossOnTestSet = totalLoss :: lossOnTestSet
       if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
