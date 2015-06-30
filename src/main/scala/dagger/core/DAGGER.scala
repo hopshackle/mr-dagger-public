@@ -63,7 +63,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_collectInstances_debug." + f"$prob%.3f" + ".txt")
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + f"$prob%.3f" + ".txt")
     var dcount = 0
     var lossOnTestSet = List[Double]()
     val allData = fork(data, options.NUM_CORES).flatMap { d =>
@@ -76,7 +76,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
       val totalLoss = predEx match {
         case None => 1.0
-        case Some(output) => utilityFunction(options, iteration, dcount, output); loss(output, d, predActions)
+        case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount, output); loss(output, d, predActions)
       }
       lossOnTestSet = totalLoss :: lossOnTestSet
       if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
@@ -250,7 +250,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
     features: (D, S, A) => Map[Int, Double], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double): (Double, Double) = {
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_stats_debug.txt", true)
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).map {
       case (d, decodePair) => //case (d, (prediction, actions)) =>
