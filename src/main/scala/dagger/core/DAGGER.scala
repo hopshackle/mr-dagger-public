@@ -31,8 +31,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
-    
-  //  def features = (d: D, s: S, a: A) => Map[Int, Double]()
+
+    //  def features = (d: D, s: S, a: A) => Map[Int, Double]()
     // Begin DAGGER training
     val instances = new ArrayBuffer[Instance[A]]
     var classifier = null.asInstanceOf[MultiClassClassifier[A]]
@@ -46,7 +46,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty) stats(dev, policy, trans, features, loss, score)
+      if (dev.nonEmpty) stats(data, dev, policy, trans, features, loss, score)
     }
     classifier
   }
@@ -233,11 +233,23 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
+  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
     loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
     val timer = new dagger.util.Timer
     timer.start()
+
+    val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score)
+    val (trainingLoss, trainingScore) = helper(trainingData, policy, trans, features, loss, score)
+
+    println(f"Mean F-Score (Validation):\t${1.0 - validationLoss / validationData.size}%.2f")
+    println(f"Mean F-Score (Training):\t${1.0 - trainingLoss / trainingData.size}%.2f")
+    println(s"Time taken for validation:\t$timer")
+
+  }
+
+  def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
+    features: (D, S, A) => Map[Int, Double], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double): (Double, Double) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "_stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).map {
@@ -252,9 +264,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
     }.foldLeft(0.0)(_ + _)
     val totalScore = score(data.zip(decoded.map(_._1.get)))
-    println(f"Total Score:\t$totalScore%.2f")
-    println(f"Mean F-Score:\t${1.0 - totalLoss / data.size}%.2f")
-    println(s"Time taken for validation:\t$timer")
     debug.close()
+    (totalLoss, totalScore)
   }
 }
