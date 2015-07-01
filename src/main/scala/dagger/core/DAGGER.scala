@@ -123,9 +123,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                   loss.max(d)
               }
             }
-          }.foldLeft(0.0)(_ + _) // Sum the label loss for all samples
+          }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
           //            }
-        }
+        } 
         // Reduce all costs until the min cost is 0cat run0101.txt
 
         val min = costs.minBy(_ * 1.0)
@@ -242,8 +242,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score)
     val (trainingLoss, trainingScore) = helper(trainingData, policy, trans, features, loss, score)
 
-    println(f"Mean F-Score (Validation):\t${1.0 - validationLoss / validationData.size}%.2f")
-    println(f"Mean F-Score (Training):\t${1.0 - trainingLoss / trainingData.size}%.2f")
+    println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.2f")
+    println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.2f")
+    println(f"Mean Score (Validation):\t${validationScore}%.2f")
+    println(f"Mean Score (Training):\t${trainingScore}%.2f")
     println(s"Time taken for validation:\t$timer")
 
   }
