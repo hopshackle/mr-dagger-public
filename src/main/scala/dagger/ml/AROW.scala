@@ -89,8 +89,6 @@ object AROW {
     }
     trainFromClassifier(
       data = pruned,
-      labels,
-      weightLabels,
       rounds = options.TRAIN_ITERATIONS,
       shuffle = options.SHUFFLE,
       averaging = options.AVERAGING,
@@ -99,7 +97,7 @@ object AROW {
       random = random)
   }
 
-  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], labels: Array[T], weightLabels: Array[T], rounds: Int, smoothing: Double = 1.0, shuffle: Boolean = true,
+  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rounds: Int, smoothing: Double = 1.0, shuffle: Boolean = true,
     averaging: Boolean = true, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random): AROWClassifier[T] = {
     // Initialize weight and variance vectors
     val weightVectors = init.weights // new HashMap[T, HashMap[Int, Double]]()
@@ -134,9 +132,12 @@ object AROW {
           // 
           val labelList = instance.labels
           val iMaxLabel = labelList.indexOf(maxLabel)
-          val maxWeightLabel = weightLabels(iMaxLabel)
+
+          val maxWeightLabel = instance.weightLabels(iMaxLabel)
+          if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
           val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
-          val minCorrectWeightLabel = weightLabels(iMinCorrectLabel)
+          val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
+          if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
           for (feat <- instance.featureVector(iMaxLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxWeightLabel)) {
@@ -230,9 +231,8 @@ object AROW {
     val fcounts = new collection.mutable.HashMap[Int, Double].withDefaultValue(0.0)
     for (d <- data; m <- d.featureVector; f <- m) fcounts(f._1) = fcounts(f._1) + f._2
     val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
-    val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map 
-      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })
-    )))
+    val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map
+      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) }))))
     out
   }
 
@@ -241,7 +241,7 @@ object AROW {
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad
     val best = (-3 to 3).map(math.pow(10, _)).map { s =>
-      val classifier = trainFromClassifier(rtrain, labels, weightLabels, rounds = 10, smoothing = s, printInterval = 0, init = init, random = random)
+      val classifier = trainFromClassifier(rtrain, rounds = 10, smoothing = s, printInterval = 0, init = init, random = random)
       val cost = rdev.map(d => d.costOf(classifier.predict(d).maxLabels.head)).foldLeft(0.0)(_ + _)
       println("Cost for smoothing parameter = %.4f is %.2f\n".format(s, cost))
       (s, cost)
