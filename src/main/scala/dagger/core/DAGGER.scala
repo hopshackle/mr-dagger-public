@@ -125,7 +125,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
           }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
           //            }
-        } 
+        }
         // Reduce all costs until the min cost is 0cat run0101.txt
 
         val min = costs.minBy(_ * 1.0)
@@ -143,7 +143,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
         // Construct new training instance with sampled losses
         val allFeatures = permissibleActions map (a => features(d, state, a))
-        val instance = new Instance[A](allFeatures.toList, permissibleActions, normedCosts)
+        val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+        val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts)
         loss.clearCache
         //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
@@ -191,7 +192,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
-          val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList, permissibleActions, permissibleActions.map(_ => 0.0))
+          val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+          val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
+            permissibleActions, weightLabels, permissibleActions.map(_ => 0.0))
           val prediction = y.predict(ex, instance, state)
           if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
         }
@@ -210,17 +213,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
 
-  def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = options.CLASSIFIER match {
-    case "AROW" => {
-      old match {
-        case c: AROWClassifier[A] => AROW.train[A](instances, actions, options, Some(c))
-        case _ => AROW.train[A](instances, actions, options)
+  def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = {
+    val weightLabels = actions map (_.getMasterLabel.asInstanceOf[A])
+    options.CLASSIFIER match {
+      case "AROW" => {
+        old match {
+          case c: AROWClassifier[A] => AROW.train[A](instances, actions, weightLabels, options, Some(c))
+          case _ => AROW.train[A](instances, actions, weightLabels, options)
+        }
       }
+      case "PASSIVE_AGGRESSIVE" => ??? //PassiveAggressive.train[A](instances, actions, options.RATE, random, options)
+      case "PERCEPTRON" => ??? // Perceptron.train[A](instances, actions, options.RATE, random, options)
     }
-    case "PASSIVE_AGGRESSIVE" => ??? //PassiveAggressive.train[A](instances, actions, options.RATE, random, options)
-    case "PERCEPTRON" => ??? // Perceptron.train[A](instances, actions, options.RATE, random, options)
   }
-
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => Map[Int, Double]): (Option[D], Array[A]) = {
     unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match { case (a, b, c) => (a, b) }

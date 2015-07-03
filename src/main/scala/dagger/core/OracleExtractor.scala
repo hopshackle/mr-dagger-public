@@ -32,7 +32,8 @@ object OracleExtractor {
         val a = trans.chooseTransition(d, s)
         assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
         val costs = permissibleActions.map(pa => if (pa == a) 0.0 else 1.0)
-        tinstances += new Instance[A]((permissibleActions map (a => features(d, s, a))).toList, permissibleActions, costs)
+        val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+        tinstances += new Instance[A]((permissibleActions map (a => features(d, s, a))).toList, permissibleActions, weightLabels, costs)
         s = a(s)
       }
       tinstances
