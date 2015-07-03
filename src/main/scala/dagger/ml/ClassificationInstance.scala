@@ -43,9 +43,10 @@ object Instance {
 
   def construct[T: ClassTag](feats: List[Map[Int, Double]], ilabels: Array[T], icosts: Array[Double], correct: Array[Boolean]): Instance[T] = {
     assert(ilabels.size > 1 && icosts.size > 1, "Insufficient costs and labels (<1) for Instance.")
-    val scosts = ilabels.zip(icosts).sortBy(_._2).toArray
+    val t = (ilabels, icosts, feats).zipped.toList
+    val scosts = t.sortBy(_._2).toArray
     var (maxCost, minCost) = (scosts.head._2, scosts.last._2)
-    new Instance[T](feats, scosts.map(_._1), scosts.map(_._2 - minCost)) //, correct.zipWithIndex.filter(p => p._1).toArray.head._2)
+    new Instance[T](scosts.map(_._3).toList, scosts.map(_._1), scosts.map(_._2 - minCost)) //, correct.zipWithIndex.filter(p => p._1).toArray.head._2)
   }
 
   def fromSerialString[T](str: String): Instance[T] = {
