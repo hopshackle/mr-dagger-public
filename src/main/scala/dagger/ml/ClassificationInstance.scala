@@ -10,7 +10,7 @@ import scala.reflect.ClassTag
  * Time: 2:43 PM
  */
 
-case class Instance[T](feats: List[Map[Int, Double]], labels: Array[T], costs: Array[Double] = null) {
+case class Instance[T](feats: List[Map[Int, Double]], labels: Array[T], weightLabels: Array[T], costs: Array[Double] = null) {
 
   def featureVector = feats
 
@@ -43,9 +43,9 @@ object Instance {
 
   def construct[T: ClassTag](feats: List[Map[Int, Double]], ilabels: Array[T], icosts: Array[Double], correct: Array[Boolean]): Instance[T] = {
     assert(ilabels.size > 1 && icosts.size > 1, "Insufficient costs and labels (<1) for Instance.")
-    val scosts = ilabels.zip(icosts).sortBy(_._2).toArray
+    val scosts = (ilabels, icosts, feats).zipped.toList.sortBy(_._2)
     var (maxCost, minCost) = (scosts.head._2, scosts.last._2)
-    new Instance[T](feats, scosts.map(_._1), scosts.map(_._2 - minCost)) //, correct.zipWithIndex.filter(p => p._1).toArray.head._2)
+    new Instance[T](scosts.map(_._3), scosts.map(_._1).toArray, scosts.map(_._1).toArray, scosts.map(_._2 - minCost).toArray) //, correct.zipWithIndex.filter(p => p._1).toArray.head._2)
   }
 
   def fromSerialString[T](str: String): Instance[T] = {
@@ -58,6 +58,6 @@ object Instance {
       }
     }.asInstanceOf[Array[T]]
     val costs = lines(number+2).split(" ").map(_.toDouble)
-    new Instance[T](feats, labels, costs)
+    new Instance[T](feats, labels, labels, costs)
   }
 }
