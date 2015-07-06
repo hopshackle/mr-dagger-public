@@ -264,8 +264,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
-            if (options.DEBUG) debug.write("Target = " + d + "\n")
-            if (options.DEBUG) debug.write("Prediction = " + structure + "\n")
+            if (options.DEBUG) {
+              debug.write("Target = " + d + "\n")
+              debug.write("Prediction = " + structure + "\n")
+              debug.write("Actions Taken: \n")
+                for (a <- actions) debug.write(a.toString + "\n")
+            }
             loss(d, structure, actions)
           case _ => loss.max(d)
         }
