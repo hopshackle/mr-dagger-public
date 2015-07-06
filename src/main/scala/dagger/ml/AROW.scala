@@ -134,10 +134,10 @@ object AROW {
           val iMaxLabel = labelList.indexOf(maxLabel)
 
           val maxWeightLabel = instance.weightLabels(iMaxLabel)
-          if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
+  //        if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
           val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
           val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
-          if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
+  //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
           for (feat <- instance.featureVector(iMaxLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxWeightLabel)) {
