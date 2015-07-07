@@ -20,3 +20,7 @@ abstract class LossFunction[D: ClassTag, A <: TransitionAction[S] : ClassTag, S 
 
   def max(gold: D): Double
 }
+
+abstract class LossFunctionFactory[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionState : ClassTag] {
+  def newLossFunction: LossFunction[D, A, S]
+}

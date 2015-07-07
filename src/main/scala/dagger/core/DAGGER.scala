@@ -24,7 +24,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expert: HeuristicPolicy[D, A, S],
     features: (D, S, A) => Map[Int, Double],
     trans: TransitionSystem[D, A, S],
-    loss: LossFunction[D, A, S], //(D, D) => Double,
+    lossFactory: LossFunctionFactory[D, A, S], 
     dev: Iterable[D] = Iterable.empty,
     score: Iterable[(D, D)] => Double,
     utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
@@ -40,19 +40,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val prob = math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      instances ++= collectInstances(data, expert, policy, features, trans, loss, prob, i, utilityFunction)
+      instances ++= collectInstances(data, expert, policy, features, trans, lossFactory, prob, i, utilityFunction)
       println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty) stats(data, dev, policy, trans, features, loss, score)
+      if (dev.nonEmpty) stats(data, dev, policy, trans, features, lossFactory, score)
     }
     classifier
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
-    features: (D, S, A) => Map[Int, Double], trans: TransitionSystem[D, A, S], loss: LossFunction[D, A, S],
+    features: (D, S, A) => Map[Int, Double], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
     prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, Int, Int, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
@@ -74,6 +74,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
       if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
       if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
+      val loss = lossFactory.newLossFunction
       val totalLoss = predEx match {
         case None => 1.0
         case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount, output); loss(output, d, predActions)
@@ -126,7 +127,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
           //            }
         }
-        // Reduce all costs until the min cost is 0cat run0101.txt
+        // Reduce all costs until the min cost is 0
 
         val min = costs.minBy(_ * 1.0)
         val normedCosts = costs.map(_ - min)
@@ -239,8 +240,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
-    loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double) = {
+    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double) = {
     // Decode all instances, assuming
+    val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
     timer.start()
 
@@ -252,7 +254,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     println(f"Mean Score (Validation):\t${validationScore}%.2f")
     println(f"Mean Score (Training):\t${trainingScore}%.2f")
     println(s"Time taken for validation:\t$timer")
-
   }
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
