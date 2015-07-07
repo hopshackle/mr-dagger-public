@@ -24,7 +24,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expert: HeuristicPolicy[D, A, S],
     features: (D, S, A) => Map[Int, Double],
     trans: TransitionSystem[D, A, S],
-    lossFactory: LossFunctionFactory[D, A, S], 
+    lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
     score: Iterable[(D, D)] => Double,
     utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
@@ -64,99 +64,104 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + f"$prob%.3f" + ".txt")
-    var dcount = 0
     var lossOnTestSet = List[Double]()
-    val allData = fork(data, options.NUM_CORES).flatMap { d =>
-      dcount += 1
-      //for ((d,dcount) <- data.view.zipWithIndex) {
-      val instances = new ArrayBuffer[Instance[A]]
-      // Use policies to fully construct (unroll) instance from start state
-      val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
-      if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
-      if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
-      val loss = lossFactory.newLossFunction
-      val totalLoss = predEx match {
-        case None => 1.0
-        case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount, output); loss(output, d, predActions)
-      }
-      lossOnTestSet = totalLoss :: lossOnTestSet
-      if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
-      // Check that the oracle policy is correct
-      //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
-      //        if (predEx.get == d) numCorrectUnrolls += 1
-      // Initialize state from data example
-      var state = trans.init(d)
-      // For all actions used to predict the unrolled structure...
-      //for (a <- predActions)
-      loss.setSamples(options.NUM_SAMPLES)
-      val allInstances = predActions.map { a =>
-        // Find all actions permissible for current state
-        if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
-        val permissibleActions = trans.permissibleActions(state)
-        // If using caching, check for a stored set of costs for this state
-        //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
-        //            cache(state)
-        //          }
-        // Compute a cost for each permissible action
-        //          else {
-        val costs = permissibleActions.map { l =>
-          (1 to options.NUM_SAMPLES).map { s =>
-            // Create a copy of the state and apply the action for the cost calculation
-            var stateCopy = state
-            stateCopy = l(stateCopy)
-            if (options.EXPERT_APPROXIMATION) {
-              loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
-            }
-            if (options.APPROXIMATE_LOSS) {
-              trans.approximateLoss(datum = d, state = state, action = l)
-            } else {
-              // Unroll from current state until completion
-              val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, features, prob)
-              // If the unrolling is successful, calculate loss with respect to gold structure
-              // Otherwise use the max cost
-              sampledEx match {
-                case Some(structure) =>
-                  val ll = loss(gold = d, test = structure, sampledActions, l)
-                  if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
-                  ll
-                case None =>
-                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
-                  loss.max(d)
+    var processedSoFar = 0
+    val dataWithIndex = data.zipWithIndex
+    val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
+      case (d, dcount) =>
+        val instances = new ArrayBuffer[Instance[A]]
+        // Use policies to fully construct (unroll) instance from start state
+        val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
+        if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
+        if (options.DEBUG) debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
+        val loss = lossFactory.newLossFunction
+        val totalLoss = predEx match {
+          case None => 1.0
+          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount + 1, output); loss(output, d, predActions)
+        }
+        this.synchronized {
+          lossOnTestSet = totalLoss :: lossOnTestSet
+        }
+        if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
+        // Check that the oracle policy is correct
+        //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
+        //        if (predEx.get == d) numCorrectUnrolls += 1
+        // Initialize state from data example
+        var state = trans.init(d)
+        // For all actions used to predict the unrolled structure...
+        //for (a <- predActions)
+        loss.setSamples(options.NUM_SAMPLES)
+        val allInstances = predActions.map { a =>
+          // Find all actions permissible for current state
+          if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
+          val permissibleActions = trans.permissibleActions(state)
+          // If using caching, check for a stored set of costs for this state
+          //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
+          //            cache(state)
+          //          }
+          // Compute a cost for each permissible action
+          //          else {
+          val costs = permissibleActions.map { l =>
+            (1 to options.NUM_SAMPLES).map { s =>
+              // Create a copy of the state and apply the action for the cost calculation
+              var stateCopy = state
+              stateCopy = l(stateCopy)
+              if (options.EXPERT_APPROXIMATION) {
+                loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
               }
-            }
-          }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
-          //            }
-        }
-        // Reduce all costs until the min cost is 0
+              if (options.APPROXIMATE_LOSS) {
+                trans.approximateLoss(datum = d, state = state, action = l)
+              } else {
+                // Unroll from current state until completion
+                val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, features, prob)
+                // If the unrolling is successful, calculate loss with respect to gold structure
+                // Otherwise use the max cost
+                sampledEx match {
+                  case Some(structure) =>
+                    val ll = loss(gold = d, test = structure, sampledActions, l)
+                    if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
+                    ll
+                  case None =>
+                    if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                    loss.max(d)
+                }
+              }
+            }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
+            //            }
+          }
+          // Reduce all costs until the min cost is 0
 
-        val min = costs.minBy(_ * 1.0)
-        val normedCosts = costs.map(_ - min)
-        if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
-        if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
-        if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
-        if (options.DEBUG) {
-          val expertAction = expert.chooseTransition(d, state)
-          val minAction = permissibleActions(normedCosts.indexOf(0.0))
-          debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
-          //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
-          debug.write("\n")
-          debug.flush()
-        }
-        // Construct new training instance with sampled losses
-        val allFeatures = permissibleActions map (a => features(d, state, a))
-        val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-        val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts)
-        loss.clearCache
-        //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
+          val min = costs.minBy(_ * 1.0)
+          val normedCosts = costs.map(_ - min)
+          if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
+          if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
+          if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
+          if (options.DEBUG) {
+            val expertAction = expert.chooseTransition(d, state)
+            val minAction = permissibleActions(normedCosts.indexOf(0.0))
+            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
+            //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
+            debug.write("\n")
+            debug.flush()
+          }
+          // Construct new training instance with sampled losses
+          val allFeatures = permissibleActions map (a => features(d, state, a))
+          val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+          val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts)
+          loss.clearCache
+          //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
-        // Progress to next state in the predicted path
-        state = a(state)
-        instance
-      }
-      if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
-        System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount, timer.toString, timer.toString(divisor = dcount)))
-      }
-      allInstances
+          // Progress to next state in the predicted path
+          state = a(state)
+          instance
+        }
+        this.synchronized {
+          processedSoFar += 1
+          if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
+            System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount + 1, timer.toString, timer.toString(divisor = processedSoFar)))
+          }
+        }
+        allInstances
     }.toArray
     if (options.DEBUG) debug.write(f"Mean Loss on test set:\t ${(lossOnTestSet reduce (_ + _)) / lossOnTestSet.size}%.3f")
     debug.close
@@ -269,7 +274,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               debug.write("Target = " + d + "\n")
               debug.write("Prediction = " + structure + "\n")
               debug.write("Actions Taken: \n")
-                for (a <- actions) debug.write(a.toString + "\n")
+              for (a <- actions) debug.write(a.toString + "\n")
             }
             loss(d, structure, actions)
           case _ => loss.max(d)
