@@ -157,7 +157,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
         this.synchronized {
           processedSoFar += 1
-          if (dcount % options.DAGGER_PRINT_INTERVAL == 0) {
+          if (processedSoFar % options.DAGGER_PRINT_INTERVAL == 0) {
             System.err.print("\r..instance %d in %s, average time per instance = %s".format(dcount + 1, timer.toString, timer.toString(divisor = processedSoFar)))
           }
         }
