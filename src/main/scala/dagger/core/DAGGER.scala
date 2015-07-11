@@ -22,7 +22,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def train(data: Iterable[D],
     expert: HeuristicPolicy[D, A, S],
-    features: (D, S, A) => Map[Int, Double],
+    featureFactory: FeatureFunctionFactory[D, S, A],
     trans: TransitionSystem[D, A, S],
     lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
@@ -40,19 +40,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val prob = math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      instances ++= collectInstances(data, expert, policy, features, trans, lossFactory, prob, i, utilityFunction)
+      instances ++= collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
       println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
       classifier = trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty) stats(data, dev, policy, trans, features, lossFactory, score)
+      if (dev.nonEmpty) stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score)
     }
     classifier
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
-    features: (D, S, A) => Map[Int, Double], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
+    featureFactory: FeatureFunctionFactory[D, S, A], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
     prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, Int, Int, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
@@ -70,11 +70,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
       case (d, dcount) =>
         val instances = new ArrayBuffer[Instance[A]]
-        // Use policies to fully construct (unroll) instance from start state
-        val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, features, prob)
-        if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
-        if (options.DEBUG) {debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))}
+        // We create new Loss and Feature functions each time for thread-safety as they cache some results for performance reasons
         val loss = lossFactory.newLossFunction
+        val featFn = featureFactory.newFeatureFunction
+        // Use policies to fully construct (unroll) instance from start state
+        val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob)
+        if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
+        if (options.DEBUG) { debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n")) }
+
         val totalLoss = predEx match {
           case None => 1.0
           case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount + 1, output); loss(output, d, predActions)
@@ -113,7 +116,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                 trans.approximateLoss(datum = d, state = state, action = l)
               } else {
                 // Unroll from current state until completion
-                val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, features, prob)
+                val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, featFn.features, prob)
                 // If the unrolling is successful, calculate loss with respect to gold structure
                 // Otherwise use the max cost
                 sampledEx match {
@@ -145,7 +148,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             debug.flush()
           }
           // Construct new training instance with sampled losses
-          val allFeatures = permissibleActions map (a => features(d, state, a))
+          val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
           val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
           val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts)
           loss.clearCache
