@@ -2,9 +2,9 @@ package dagger.core
 
 import java.io.FileWriter
 
-import dagger.ml.Instance
+import dagger.ml._
 
-import scala.collection.parallel.{ForkJoinTaskSupport, ParIterable}
+import scala.collection.parallel.{ ForkJoinTaskSupport, ParIterable }
 import scala.concurrent.forkjoin.ForkJoinPool
 
 // import ml.wolfe.nlp.io.ChunkReader
@@ -16,14 +16,19 @@ import scala.reflect.ClassTag
 /**
  * Created by narad on 4/6/15.
  */
-object OracleExtractor {
+class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
+  
+  val helperDagger = new DAGGER[D, A, S](options)
 
-  def instances[D: ClassTag, A <: TransitionAction[S] : ClassTag, S <: TransitionState : ClassTag] (data: Iterable[D], trans: TransitionSystem[D, A, S],features: (D, S, A) => Map[Int, Double], printInterval: Int = 1000, numCores: Int = 1): Iterable[Instance[A]] = {
-   // val instances = new ArrayBuffer[Instance[A]]
+  def instances(data: Iterable[D],
+    trans: TransitionSystem[D, A, S],
+    featureFactory: FeatureFunctionFactory[D, S, A],
+    printInterval: Int = 1000): Iterable[Instance[A]] = {
+
     val timer = new dagger.util.Timer
     timer.start()
-    val instances = fork(data, numCores).flatMap { d => // } (d <- data.par) {
-      // if (didx % printInterval == 0) println("Processing instance %d...".format(didx))
+    val instances = helperDagger.fork(data, options.NUM_CORES).flatMap { d =>
+      val featFn = featureFactory.newFeatureFunction
       var s = trans.init(d)
       val tinstances = new ArrayBuffer[Instance[A]]
       while (!trans.isTerminal(s)) {
@@ -33,7 +38,7 @@ object OracleExtractor {
         assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
         val costs = permissibleActions.map(pa => if (pa == a) 0.0 else 1.0)
         val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-        tinstances += new Instance[A]((permissibleActions map (a => features(d, s, a))).toList, permissibleActions, weightLabels, costs)
+        tinstances += new Instance[A]((permissibleActions map (a => featFn.features(d, s, a))).toList, permissibleActions, weightLabels, costs)
         s = a(s)
       }
       tinstances
@@ -43,9 +48,24 @@ object OracleExtractor {
     instances.toIterable
   }
 
-  def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
-    val par = data.par
-    par.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(forkSize))
-    par
+  def train(data: Iterable[D],
+    expert: HeuristicPolicy[D, A, S],
+    featureFactory: FeatureFunctionFactory[D, S, A],
+    lossFactory: LossFunctionFactory[D, A, S],
+    trans: TransitionSystem[D, A, S],
+    dev: Iterable[D] = Iterable.empty,
+    score: Iterable[(D, D)] => Double,
+    options: DAGGEROptions,
+    utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
+
+    val inst = instances(data, trans, featureFactory)
+    println("Oracle Extractor - training classifier on " + inst.size + " total instances.")
+    val classifier = helperDagger.trainFromInstances(inst, trans.actions, null)
+    val policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
+
+    if (dev.nonEmpty) helperDagger.stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score)
+
+    classifier
   }
+
 }

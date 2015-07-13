@@ -8,7 +8,6 @@ abstract class TransitionAction[S <: TransitionState] {
   def apply(state: S): S
   
   def getMasterLabel: TransitionAction[S] = this
-
 }
 
 abstract class TransitionState {}
