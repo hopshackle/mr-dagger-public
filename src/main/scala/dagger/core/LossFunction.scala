@@ -12,11 +12,13 @@ abstract class LossFunction[D: ClassTag, A <: TransitionAction[S] : ClassTag, S 
   // actually supports caching
   def setSamples(samples: Int): Unit = {}
 
-  def apply(gold: D, test: D, testActions: Array[A], trialAction: A): Double = this.apply(gold, test, testActions)
-  // This is the one we now call in DAGGER - but the final argument is only used for AMR Loss caching
+  def apply(gold: D, test: D, testActions: Array[A], expertActions: Array[A], trialAction: A, lastExpertAction: A): Double = this.apply(gold, test, testActions, expertActions)
+  // This is the one we now call in DAGGER - but the final two arguments are only used for AMR 
   // So for backwards compatibility, we provide a default implementation that calls the original signature
   
   def apply(gold: D, test: D, testActions: Array[A]): Double
+  
+  def apply(gold: D, test: D, testActions: Array[A], expertActions: Array[A]): Double = this.apply(gold, test, testActions)
 
   def max(gold: D): Double
 }

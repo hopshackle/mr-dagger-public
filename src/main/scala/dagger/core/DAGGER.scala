@@ -74,13 +74,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val loss = lossFactory.newLossFunction
         val featFn = featureFactory.newFeatureFunction
         // Use policies to fully construct (unroll) instance from start state
+        val (_, expertActions, _) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0)
         val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob)
         if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
         if (options.DEBUG) { debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n")) }
 
         val totalLoss = predEx match {
           case None => 1.0
-          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount + 1, output); loss(output, d, predActions)
+          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount + 1, output); loss(output, d, predActions, expertActions)
         }
         this.synchronized {
           lossOnTestSet = totalLoss :: lossOnTestSet
@@ -96,32 +97,30 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         loss.setSamples(options.NUM_SAMPLES)
         val allInstances = predActions.map { a =>
           // Find all actions permissible for current state
+          val nextExpertAction = expert.chooseTransition(d, state)
           if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
           val permissibleActions = trans.permissibleActions(state)
-          // If using caching, check for a stored set of costs for this state
-          //          val costs: Array[Double] = if (options.CACHING && cache.contains(state)) {
-          //            cache(state)
-          //          }
+
           // Compute a cost for each permissible action
-          //          else {
           val costs = permissibleActions.map { l =>
             (1 to options.NUM_SAMPLES).map { s =>
               // Create a copy of the state and apply the action for the cost calculation
               var stateCopy = state
               stateCopy = l(stateCopy)
-              if (options.EXPERT_APPROXIMATION) {
-                loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array())
-              }
+              //        if (options.EXPERT_APPROXIMATION) {
+              //          loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array(), expertActions)
+              //        }
               if (options.APPROXIMATE_LOSS) {
                 trans.approximateLoss(datum = d, state = state, action = l)
               } else {
                 // Unroll from current state until completion
+                val (_, expertActionsFromHere, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0)
                 val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, featFn.features, prob)
                 // If the unrolling is successful, calculate loss with respect to gold structure
                 // Otherwise use the max cost
                 sampledEx match {
                   case Some(structure) =>
-                    val ll = loss(gold = d, test = structure, sampledActions, l)
+                    val ll = loss(gold = d, test = structure, sampledActions, expertActionsFromHere, l, nextExpertAction)
                     if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
                     ll
                   case None =>
@@ -140,9 +139,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
           if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
           if (options.DEBUG) {
-            val expertAction = expert.chooseTransition(d, state)
             val minAction = permissibleActions(normedCosts.indexOf(0.0))
-            debug.write("Expert action: " + expertAction + ", versus min cost action: " + minAction + "\n")
+            debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
             //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
             debug.write("\n")
             debug.flush()
