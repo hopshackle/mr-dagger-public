@@ -278,10 +278,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               for (a <- actions) debug.write(a.toString + "\n")
             }
             loss(d, structure, actions)
-          case _ => loss.max(d)
+          case _ => {
+            println("No data found for " + d)
+            loss.max(d)
+          }
         }
     }.foldLeft(0.0)(_ + _)
-    val totalScore = score(data.zip(decoded.map(_._1.get)))
+    val totalScore = score(data.zip(decoded filter{case (prediction, _) => prediction != None} map (_._1.get)))
     debug.close()
     (totalLoss, totalScore)
   }
