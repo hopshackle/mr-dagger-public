@@ -27,7 +27,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
     score: Iterable[(D, D)] => Double,
-    utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
+    utilityFunction: (DAGGEROptions, String, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
@@ -46,14 +46,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty) stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score)
+      if (dev.nonEmpty) stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
     }
     classifier
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
     featureFactory: FeatureFunctionFactory[D, S, A], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
-    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, Int, Int, D) => Unit): Array[Instance[A]] = {
+    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
     // Compute the probability of choosing the oracle policy in this round
@@ -81,7 +81,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
         val totalLoss = predEx match {
           case None => 1.0
-          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration, dcount + 1, output); loss(output, d, predActions, expertActions)
+          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration + "_" + (dcount + 1).toString, output); loss(output, d, predActions, expertActions)
         }
         this.synchronized {
           lossOnTestSet = totalLoss :: lossOnTestSet
@@ -246,13 +246,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
-    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double) = {
+    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double, utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
     timer.start()
 
-    val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score)
+    val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score, utilityFunction)
     val (trainingLoss, trainingScore) = helper(trainingData, policy, trans, features, loss, score)
 
     println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.2f")
@@ -263,14 +263,16 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: (D, S, A) => Map[Int, Double], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double): (Double, Double) = {
+    features: (D, S, A) => Map[Int, Double], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
+    utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, Double) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
-    val totalLoss = data.zip(decoded).map {
-      case (d, decodePair) => //case (d, (prediction, actions)) =>
+    val totalLoss = data.zip(decoded).zipWithIndex.map {
+      case ((d, decodePair), index) => //case (d, (prediction, actions)) =>
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
+            if (utilityFunction != null) utilityFunction(options, "val_" + (index + 1), structure)
             if (options.DEBUG) {
               debug.write("Target = " + d + "\n")
               debug.write("Prediction = " + structure + "\n")

@@ -17,7 +17,7 @@ import scala.reflect.ClassTag
  * Created by narad on 4/6/15.
  */
 class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
-  
+
   val helperDagger = new DAGGER[D, A, S](options)
 
   def instances(data: Iterable[D],
@@ -42,10 +42,12 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
         s = a(s)
       }
       tinstances
-    }.toArray
+    }
     timer.stop()
     println("Extracted oracle instances in %s.".format(timer.toString))
-    instances.toIterable
+    val arrayInstance = instances.toArray
+    println("Converted to Array")
+    arrayInstance.toIterable
   }
 
   def train(data: Iterable[D],
