@@ -255,10 +255,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score, utilityFunction)
     val (trainingLoss, trainingScore) = helper(trainingData, policy, trans, features, loss, score)
 
-    println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.2f")
-    println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.2f")
-    println(f"Mean Score (Validation):\t${validationScore}%.2f")
-    println(f"Mean Score (Training):\t${trainingScore}%.2f")
+    println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.3f")
+    println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.3f")
+    println(f"Mean Score (Validation):\t${validationScore}%.3f")
+    println(f"Mean Score (Training):\t${trainingScore}%.3f")
     println(s"Time taken for validation:\t$timer")
   }
 
