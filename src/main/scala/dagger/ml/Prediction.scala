@@ -6,7 +6,7 @@ import scala.collection.Map
 /**
  * Created by narad on 8/8/14.
  */
-case class Prediction[T](label2score: Map[T, Double], entropy: Double = 0.0) {
+case class Prediction[T](label2score: Map[T, Float], entropy: Double = 0.0) {
 
 
   def randomMaxLabel(random: Random) = {

@@ -15,8 +15,8 @@ import scala.util.Random
  * Date: 5/14/14
  * Time: 12:13 PM
  */
-case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]] = new HashMap[T, HashMap[Int, Double]](),
-  variances: HashMap[T, HashMap[Int, Double]] = new HashMap[T, HashMap[Int, Double]]())
+case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]](),
+  variances: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]]())
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
@@ -25,13 +25,13 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]]
 
     val scores = (instance.labels, instance.weightLabels, instance.featureVector).zipped map {
       case (label, weightLabel, feats) =>
-        if (!weights.contains(weightLabel)) weights(weightLabel) = new HashMap[Int, Double]
+        if (!weights.contains(weightLabel)) weights(weightLabel) = new HashMap[Int, Float]
         label -> dotMap(feats, weights(weightLabel))
     }
     Prediction[T](label2score = scores.toMap)
   }
 
-  def weightOf(a: T, p: Int): Double = weights(a).getOrElse(p, 0.0)
+  def weightOf(a: T, p: Int): Float = weights(a).getOrElse(p, 0.0f)
 
   def writeToFile(filename: String) = {
     println("Labels: " + weights.keys.mkString(", "))
@@ -48,25 +48,25 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Double]]
 object AROWClassifier {
 
   def empty[T: ClassTag](labels: Array[T] = Array(), weightLabels: Array[T]): AROWClassifier[T] = {
-    val weights = new HashMap[T, HashMap[Int, Double]]
-    val variances = new HashMap[T, HashMap[Int, Double]]
+    val weights = new HashMap[T, HashMap[Int, Float]]
+    val variances = new HashMap[T, HashMap[Int, Float]]
     for (l <- weightLabels) {
-      if (!weights.contains(l)) weights(l) = new HashMap[Int, Double]
-      if (!variances.contains(l)) variances(l) = new HashMap[Int, Double]
+      if (!weights.contains(l)) weights(l) = new HashMap[Int, Float]
+      if (!variances.contains(l)) variances(l) = new HashMap[Int, Float]
     }
     AROWClassifier(weights, variances)
   }
 
   def fromFile[T: ClassTag](filename: String, actionMap: (String => T)): AROWClassifier[T] = {
-    val weights = new HashMap[T, HashMap[Int, Double]]
-    val variances = new HashMap[T, HashMap[Int, Double]]
+    val weights = new HashMap[T, HashMap[Int, Float]]
+    val variances = new HashMap[T, HashMap[Int, Float]]
     val lines = io.Source.fromFile(filename).getLines
     lines.foreach { line =>
       val cols = line.split("\t")
       val label = actionMap(cols(0))
       val f = cols(1).toInt
-      val w = cols(2).toDouble
-      if (!weights.contains(label)) weights(label) = new HashMap[Int, Double]
+      val w = cols(2).toFloat
+      if (!weights.contains(label)) weights(label) = new HashMap[Int, Float]
       weights(label)(f) = w
     }
     AROWClassifier(weights, variances)
@@ -126,8 +126,8 @@ object AROW {
           // correctLabels is an array of all those with cost of 0.0
           // so this line produces tuple of correct label with the lowest score from the classifier (i.e. the least good correct prediction)
           val (minCorrectLabel, minCorrectScore) = instance.correctLabels.map(l => (l, prediction.label2score(l))).toArray.sortBy(_._2).head
-          val zVectorPredicted = new HashMap[Int, Double]()
-          val zVectorMinCorrect = new HashMap[Int, Double]()
+          val zVectorPredicted = new HashMap[Int, Float]()
+          val zVectorMinCorrect = new HashMap[Int, Float]()
 
           // 
           val labelList = instance.labels
@@ -141,7 +141,7 @@ object AROW {
           for (feat <- instance.featureVector(iMaxLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxWeightLabel)) {
-              zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0)
+              zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
             } else {
               zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
             }
@@ -149,7 +149,7 @@ object AROW {
           for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(minCorrectWeightLabel)) {
-              zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0)
+              zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
             } else {
               zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
             }
@@ -159,8 +159,8 @@ object AROW {
           val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
           val confidence = preDot + minDot
 
-          val beta = 1.0 / (confidence + smoothing)
-          val loss = maxScore - minCorrectScore + math.sqrt(icost)
+          val beta = 1.0f / (confidence + smoothing.toFloat)
+          val loss = (maxScore - minCorrectScore + math.sqrt(icost)).toFloat
           val alpha = loss * beta
 
           if (verbose) {
@@ -177,18 +177,18 @@ object AROW {
             println("min dot = " + minDot)
           }
 
-          add(weightVectors(maxWeightLabel), zVectorPredicted, -1.0 * alpha)
+          add(weightVectors(maxWeightLabel), zVectorPredicted, -1.0f * alpha)
           add(weightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha)
 
           for (feat <- instance.featureVector(iMaxLabel).keys) {
             // AV: you can save yourself this if by initializing them in the beginning
-            if (!varianceVectors.contains(maxWeightLabel)) varianceVectors(maxWeightLabel) = new HashMap[Int, Double]()
-            varianceVectors(maxWeightLabel)(feat) = varianceVectors(maxWeightLabel).getOrElse(feat, 1.0) - beta * math.pow(zVectorPredicted(feat), 2)
+            if (!varianceVectors.contains(maxWeightLabel)) varianceVectors(maxWeightLabel) = new HashMap[Int, Float]()
+            varianceVectors(maxWeightLabel)(feat) = varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorPredicted(feat), 2).toFloat
           }
           for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
             // AV: you can save yourself this if by initializing them in the beginning
-            if (!varianceVectors.contains(minCorrectWeightLabel)) varianceVectors(minCorrectWeightLabel) = new HashMap[Int, Double]()
-            varianceVectors(minCorrectWeightLabel)(feat) = varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0) - beta * math.pow(zVectorMinCorrect(feat), 2)
+            if (!varianceVectors.contains(minCorrectWeightLabel)) varianceVectors(minCorrectWeightLabel) = new HashMap[Int, Float]()
+            varianceVectors(minCorrectWeightLabel)(feat) = (varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorMinCorrect(feat), 2)).toFloat
           }
         }
       }
@@ -217,12 +217,12 @@ object AROW {
     new AROWClassifier[T](weightVectors, varianceVectors)
   }
 
-  def add(v1: HashMap[Int, Double], v2: HashMap[Int, Double], damp: Double = 1.0) = {
-    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0) + value * damp
+  def add(v1: HashMap[Int, Float], v2: HashMap[Int, Float], damp: Float = 1.0f) = {
+    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
 
-  def dotMap(v1: collection.Map[Int, Double], v2: collection.Map[Int, Double]): Double = {
-    v1.foldLeft(0.0) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0) }
+  def dotMap(v1: collection.Map[Int, Float], v2: collection.Map[Int, Float]): Float = {
+    v1.foldLeft(0.0f) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0f) }
   }
 
   // Remove rare features

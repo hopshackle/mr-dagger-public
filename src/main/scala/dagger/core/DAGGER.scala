@@ -133,8 +133,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           }
           // Reduce all costs until the min cost is 0
 
-          val min = costs.minBy(_ * 1.0)
-          val normedCosts = costs.map(_ - min)
+          val min = costs.minBy(_ * 1.0).toFloat
+          val normedCosts = costs.map(x => (x - min).toFloat)
           if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
           if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
           if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
@@ -184,7 +184,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expertPolicy: HeuristicPolicy[D, A, S],
     classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     start: S, trans: TransitionSystem[D, A, S],
-    featureFunction: (D, S, A) => Map[Int, Double],
+    featureFunction: (D, S, A) => Map[Int, Float],
     prob: Double = 1.0): (Option[D], Array[A], Array[Boolean]) = {
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]
@@ -201,7 +201,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         case y: ProbabilisticClassifierPolicy[D, A, S] => {
           val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
           val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
-            permissibleActions, weightLabels, permissibleActions.map(_ => 0.0))
+            permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
           val prediction = y.predict(ex, instance, state)
           if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
         }
@@ -234,7 +234,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     }
   }
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
-    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => Map[Int, Double]): (Option[D], Array[A]) = {
+    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => Map[Int, Float]): (Option[D], Array[A]) = {
     unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match { case (a, b, c) => (a, b) }
   }
 
@@ -245,7 +245,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Double],
+  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Float],
     lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double, utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
@@ -263,7 +263,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: (D, S, A) => Map[Int, Double], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
+    features: (D, S, A) => Map[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
     utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, Double) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
@@ -286,7 +286,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           }
         }
     }.foldLeft(0.0)(_ + _)
-    val totalScore = score(data.zip(decoded filter{case (prediction, _) => prediction != None} map (_._1.get)))
+    val totalScore = score(data.zip(decoded filter { case (prediction, _) => prediction != None } map (_._1.get)))
     debug.close()
     (totalLoss, totalScore)
   }

@@ -11,11 +11,11 @@ import scala.util.Random
 /**
  * Created by narad on 4/6/15.
  */
-class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Double]]) extends MultiClassClassifier[T] {
+class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Float]]) extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
-    val scores: Map[T, Double] = if (weights.isEmpty) {
-      instance.labels.map { label => label -> 1.0 }.toMap
+    val scores: Map[T, Float] = if (weights.isEmpty) {
+      instance.labels.map { label => label -> 1.0f }.toMap
     } else {
       ((instance.labels.toList.zipWithIndex) map {
         case (label, i) =>
@@ -25,11 +25,11 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Double
     Prediction[T](label2score = scores)
   }
 
-  def weightOf(a: T, p: Int): Double = {
+  def weightOf(a: T, p: Int): Float = {
     if (weights.contains(a)) {
       weights(a).get(p).get
     } else {
-      0.0
+      0.0f
     }
   }
 
@@ -45,10 +45,10 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Double
 object PassiveAggressive {
 
   def train[T: ClassTag](data: Iterable[Instance[T]], labels: Seq[T], rate: Double = 0.1, random: Random, options: AROWOptions, verbose: Boolean = false): PassiveAggressiveClassifier[T] = {
-    val smoothing = options.SMOOTHING
+    val smoothing = options.SMOOTHING.toFloat
     // Initialize weight and variance vectors
-    val weightVectors = new HashMap[T, HashMap[Int, Double]]
-    for (label <- labels) weightVectors.put(label, new HashMap[Int, Double])
+    val weightVectors = new HashMap[T, HashMap[Int, Float]]
+    for (label <- labels) weightVectors.put(label, new HashMap[Int, Float])
 
     // Begin training loop
     val rounds = options.TRAIN_ITERATIONS
@@ -85,12 +85,12 @@ object PassiveAggressive {
           }
 
           val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
-          val loss = maxScore - minCorrectScore + math.sqrt(instance.costOf(maxLabel))
+          val loss = (maxScore - minCorrectScore + math.sqrt(instance.costOf(maxLabel))).toFloat
           val norm = 2 * (dotMap(instance.featureVector(iMinCorrectLabel), instance.featureVector(iMinCorrectLabel)))
-          val factor = loss / (norm + (1.0 / (2 * smoothing)))
+          val factor = loss / (norm + (1.0f / (2 * smoothing)))
 
           val iMaxLabel = labelList.indexOf(maxLabel)
-          add(weightVectors(maxLabel), instance.featureVector(iMaxLabel), -1.0 * factor)
+          add(weightVectors(maxLabel), instance.featureVector(iMaxLabel), -1.0f * factor)
           add(weightVectors(minCorrectLabel), instance.featureVector(iMinCorrectLabel), factor)
         }
       }
@@ -118,12 +118,12 @@ object PassiveAggressive {
     new PassiveAggressiveClassifier[T](weightVectors)
   }
 
-  def add(v1: HashMap[Int, Double], v2: collection.Map[Int, Double], damp: Double = 1.0) = {
-    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0) + value * damp
+  def add(v1: HashMap[Int, Float], v2: collection.Map[Int, Float], damp: Float = 1.0f): Unit = {
+    for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
 
-  def dotMap(v1: collection.Map[Int, Double], v2: collection.Map[Int, Double]): Double = {
-    v1.foldLeft(0.0) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0) }
+  def dotMap(v1: collection.Map[Int, Float], v2: collection.Map[Int, Float]): Float = {
+    v1.foldLeft(0.0f) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0f) }
   }
 
 }

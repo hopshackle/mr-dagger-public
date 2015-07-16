@@ -36,7 +36,7 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
         assert(permissibleActions.nonEmpty, "No permissible actions found for state:\n%s".format(s))
         val a = trans.chooseTransition(d, s)
         assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
-        val costs = permissibleActions.map(pa => if (pa == a) 0.0 else 1.0)
+        val costs = permissibleActions.map(pa => if (pa == a) 0.0f else 1.0f)
         val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
         tinstances += new Instance[A]((permissibleActions map (a => featFn.features(d, s, a))).toList, permissibleActions, weightLabels, costs)
         s = a(s)
