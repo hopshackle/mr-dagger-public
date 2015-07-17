@@ -23,9 +23,10 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
   def instances(data: Iterable[D],
     trans: TransitionSystem[D, A, S],
     featureFactory: FeatureFunctionFactory[D, S, A],
-    printInterval: Int = 1000): Iterable[Instance[A]] = {
+    printInterval: Int = 100): Iterable[Instance[A]] = {
 
     val timer = new dagger.util.Timer
+    var processedSoFar = 0
     timer.start()
     val instances = helperDagger.fork(data, options.NUM_CORES).flatMap { d =>
       val featFn = featureFactory.newFeatureFunction
@@ -40,6 +41,12 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
         val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
         tinstances += new Instance[A]((permissibleActions map (a => featFn.features(d, s, a))).toList, permissibleActions, weightLabels, costs)
         s = a(s)
+      }
+      this.synchronized {
+        processedSoFar += 1
+        if (processedSoFar % printInterval == 0) {
+          System.err.print("\r.. %d instances in %s, average time per instance = %s".format(processedSoFar, timer.toString, timer.toString(divisor = processedSoFar)))
+        }
       }
       tinstances
     }
