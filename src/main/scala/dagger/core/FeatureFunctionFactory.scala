@@ -1,5 +1,5 @@
 package dagger.core
-import scala.collection.Map
+import gnu.trove.map.hash.THashMap
 
 import scala.reflect.ClassTag
 abstract class FeatureFunctionFactory[D: ClassTag, S <: TransitionState: ClassTag, A <: TransitionAction[S]: ClassTag] {
@@ -7,5 +7,5 @@ abstract class FeatureFunctionFactory[D: ClassTag, S <: TransitionState: ClassTa
 }
 
 abstract class FeatureFunction[D: ClassTag, S <: TransitionState: ClassTag, A <: TransitionAction[S]: ClassTag] {
-  def features(data: D, state: S, action: A): Map[Int, Float]
+  def features(data: D, state: S, action: A): gnu.trove.map.hash.THashMap[Int, Float]
 }

@@ -12,6 +12,7 @@ import scala.concurrent.forkjoin.ForkJoinPool
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import gnu.trove.map.hash.THashMap
 
 /**
  * Created by narad on 4/6/15.
@@ -33,10 +34,15 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
       var s = trans.init(d)
       val tinstances = new ArrayBuffer[Instance[A]]
       while (!trans.isTerminal(s)) {
-        val permissibleActions = trans.permissibleActions(s)
-        assert(permissibleActions.nonEmpty, "No permissible actions found for state:\n%s".format(s))
         val a = trans.chooseTransition(d, s)
-        assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
+        var permissibleActions = trans.permissibleActions(s)
+        assert(permissibleActions.nonEmpty, "No permissible actions found for state:\n%s".format(s))
+
+        if (!trans.permissibleActions(s).contains(a)) {
+          println("Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
+          permissibleActions = permissibleActions ++ Array(a)
+        }
+        //     assert(permissibleActions.contains(a), "Oracle chose action (%s) not considered permissible by transition system for state:\n%s.".format(a, s))
         val costs = permissibleActions.map(pa => if (pa == a) 0.0f else 1.0f)
         val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
         tinstances += new Instance[A]((permissibleActions map (a => featFn.features(d, s, a))).toList, permissibleActions, weightLabels, costs)

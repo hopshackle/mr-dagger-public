@@ -134,10 +134,10 @@ object AROW {
           val iMaxLabel = labelList.indexOf(maxLabel)
 
           val maxWeightLabel = instance.weightLabels(iMaxLabel)
-  //        if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
+          //        if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
           val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
           val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
-  //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
+          //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
           for (feat <- instance.featureVector(iMaxLabel).keys) {
             //AV: The if is not needed here, you do it with getOrElse right?
             if (varianceVectors.contains(maxWeightLabel)) {
@@ -225,6 +225,11 @@ object AROW {
     v1.foldLeft(0.0f) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0f) }
   }
 
+  def dotMap(v1: gnu.trove.map.hash.THashMap[Int, Float], v2: collection.Map[Int, Float]): Float = {
+    val scalaMap = Instance.troveMapToScala(v1)
+    dotMap(scalaMap, v2)
+  }
+
   // Remove rare features
   def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Iterable[Instance[T]] = {
     if (count == 0) return data
@@ -232,7 +237,8 @@ object AROW {
     for (d <- data; m <- d.featureVector; f <- m) fcounts(f._1) = fcounts(f._1) + f._2
     val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
     val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map
-      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) }))))
+      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })) map Instance.scalaMapToTrove
+      ))
     out
   }
 

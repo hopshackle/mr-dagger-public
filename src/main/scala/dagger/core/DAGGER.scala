@@ -9,6 +9,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 import scala.util.Random
+import gnu.trove.map.hash.THashMap
 
 /**
  * Created by narad on 6/10/14.
@@ -184,7 +185,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expertPolicy: HeuristicPolicy[D, A, S],
     classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     start: S, trans: TransitionSystem[D, A, S],
-    featureFunction: (D, S, A) => Map[Int, Float],
+    featureFunction: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
     prob: Double = 1.0): (Option[D], Array[A], Array[Boolean]) = {
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]
@@ -234,7 +235,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     }
   }
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
-    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => Map[Int, Float]): (Option[D], Array[A]) = {
+    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float]): (Option[D], Array[A]) = {
     unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, prob = 0.0) match { case (a, b, c) => (a, b) }
   }
 
@@ -245,7 +246,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => Map[Int, Float],
+  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
     lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double, utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
@@ -263,7 +264,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: (D, S, A) => Map[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
+    features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
     utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, Double) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
