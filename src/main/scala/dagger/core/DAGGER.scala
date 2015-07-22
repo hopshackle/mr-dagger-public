@@ -75,7 +75,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val loss = lossFactory.newLossFunction
         val featFn = featureFactory.newFeatureFunction
         // Use policies to fully construct (unroll) instance from start state
-        val (_, expertActions, _) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0)
+        val (_, expertActions, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0) else (0, Array[A](), 0)
         val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob)
         if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
         if (options.DEBUG) { debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n")) }
@@ -115,18 +115,18 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                 trans.approximateLoss(datum = d, state = state, action = l)
               } else {
                 // Unroll from current state until completion
-                val (_, expertActionsFromHere, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0)
-                val (sampledEx, sampledActions, expertInSample) = unroll(d, expert, policy, stateCopy, trans, featFn.features, prob)
+                val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
+                val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, prob) else (Some(d), Array[A](), Array[Boolean]())
                 // If the unrolling is successful, calculate loss with respect to gold structure
                 // Otherwise use the max cost
                 sampledEx match {
+                  case None =>
+                    if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                    loss.max(d)
                   case Some(structure) =>
                     val ll = loss(gold = d, test = structure, sampledActions, expertActionsFromHere, l, nextExpertAction)
                     if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
                     ll
-                  case None =>
-                    if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
-                    loss.max(d)
                 }
               }
             }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
@@ -135,14 +135,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           // Reduce all costs until the min cost is 0
 
           val min = costs.minBy(_ * 1.0).toFloat
-          val normedCosts = costs.map(x => (x - min).toFloat)
+          val tempNormCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0f else 1.0f) else costs.map(x => (x - min).toFloat)
+          val normedCosts = if (tempNormCosts contains 0.0f) tempNormCosts else (tempNormCosts map (x => 0.0f)).toArray
           if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
           if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
           if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
           if (options.DEBUG) {
             val minAction = permissibleActions(normedCosts.indexOf(0.0))
             debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
-            //          normedCosts = permissibleActions.map(pa => if (pa == chosen) 0.0 else 1.0)
             debug.write("\n")
             debug.flush()
           }

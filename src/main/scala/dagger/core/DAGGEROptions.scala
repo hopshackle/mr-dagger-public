@@ -46,6 +46,10 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val SERIALIZE = getBoolean("--serialize", default = false)
   
   lazy val DEBUG = getBoolean("--debug", default = false)
+  
+  lazy val UNROLL_EXPERT_FOR_LOSS = getBoolean("--unrollExpert", default = false)
+  
+  lazy val ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
 
   override def toString = {
     "DAGGER Options:\n" +

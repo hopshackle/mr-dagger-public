@@ -125,7 +125,9 @@ object AROW {
 
           // correctLabels is an array of all those with cost of 0.0
           // so this line produces tuple of correct label with the lowest score from the classifier (i.e. the least good correct prediction)
-          val (minCorrectLabel, minCorrectScore) = instance.correctLabels.map(l => (l, prediction.label2score(l))).toArray.sortBy(_._2).head
+          val temp = instance.correctLabels.map(l => (l, prediction.label2score(l))).toArray.sortBy(_._2)
+          if (temp.isEmpty) println("No Correct Labels found for: \n" + instance)
+          val (minCorrectLabel, minCorrectScore) = temp.head
           val zVectorPredicted = new HashMap[Int, Float]()
           val zVectorMinCorrect = new HashMap[Int, Float]()
 
