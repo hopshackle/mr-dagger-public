@@ -27,7 +27,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     trans: TransitionSystem[D, A, S],
     lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
-    score: Iterable[(D, D)] => Double,
+    score: Iterable[(D, D)] => List[(String, Double)],
     utilityFunction: (DAGGEROptions, String, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
@@ -247,7 +247,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
-    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => Double, utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
+    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
@@ -258,14 +258,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
     println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.3f")
     println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.3f")
-    println(f"Mean Score (Validation):\t${validationScore}%.3f")
-    println(f"Mean Score (Training):\t${trainingScore}%.3f")
+    validationScore foreach (x => println(f"Mean ${x._1} (Validation):\t${x._2}%.3f"))
+    trainingScore foreach (x => println(f"Mean ${x._1} (Training):\t${x._2}%.3f"))
     println(s"Time taken for validation:\t$timer")
   }
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => Double,
-    utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, Double) = {
+    features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
+    utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, List[(String, Double)]) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {

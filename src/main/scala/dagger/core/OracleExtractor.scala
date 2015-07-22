@@ -69,7 +69,7 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
     lossFactory: LossFunctionFactory[D, A, S],
     trans: TransitionSystem[D, A, S],
     dev: Iterable[D] = Iterable.empty,
-    score: Iterable[(D, D)] => Double,
+    score: Iterable[(D, D)] => List[(String, Double)],
     options: DAGGEROptions,
     utilityFunction: (DAGGEROptions, Int, Int, D) => Unit = null): MultiClassClassifier[A] = {
 
