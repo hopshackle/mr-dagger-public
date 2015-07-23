@@ -44,12 +44,18 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val POLICY_DECAY = getDouble("--policy.decay", 0.2)
 
   lazy val SERIALIZE = getBoolean("--serialize", default = false)
-  
+
   lazy val DEBUG = getBoolean("--debug", default = false)
-  
+
   lazy val UNROLL_EXPERT_FOR_LOSS = getBoolean("--unrollExpert", default = false)
+
+  var ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
+
+  lazy val LOLS = getBoolean("--LOLS", default = false)
   
-  lazy val ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
+  lazy val INITIAL_EXPERT_PROB = getDouble("--initialExpertProb", default = 1.0)
+
+  lazy val MAX_ACTIONS = getInt("--maxActions", default = 300)
 
   override def toString = {
     "DAGGER Options:\n" +
@@ -62,7 +68,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
       "  Number of samples: %d\n".format(NUM_SAMPLES) +
       "  Policy decay rate: %f\n".format(POLICY_DECAY) +
       "  Number of cores: %d\n".format(NUM_CORES)
-      super.toString
+    super.toString
   }
 
 }
