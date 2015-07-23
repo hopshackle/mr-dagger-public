@@ -52,7 +52,9 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   var ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
 
   lazy val LOLS = getBoolean("--LOLS", default = false)
-  
+
+  lazy val LOLSDet = getBoolean("--LOLSDet", default = false)
+
   lazy val INITIAL_EXPERT_PROB = getDouble("--initialExpertProb", default = 1.0)
 
   lazy val MAX_ACTIONS = getInt("--maxActions", default = 300)

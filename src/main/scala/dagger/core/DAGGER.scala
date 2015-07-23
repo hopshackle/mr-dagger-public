@@ -66,16 +66,18 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + f"$prob%.3f" + ".txt")
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_"+ f"$prob%.3f" + ".txt")
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
     val dataWithIndex = data.zipWithIndex
+
     val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
       case (d, dcount) =>
         val instances = new ArrayBuffer[Instance[A]]
         // We create new Loss and Feature functions each time for thread-safety as they cache some results for performance reasons
         val loss = lossFactory.newLossFunction
         val featFn = featureFactory.newFeatureFunction
+
         // Use policies to fully construct (unroll) instance from start state
         val (_, expertActions, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0) else (0, Array[A](), 0)
         val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob, true)
@@ -97,7 +99,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         var state = trans.init(d)
         // For all actions used to predict the unrolled structure...
         //for (a <- predActions)
-        loss.setSamples(options.NUM_SAMPLES)
+        loss.setSamples(options.NUM_SAMPLES * (if (options.LOLSDet) 2 else 1))
         val allInstances = predActions.map { a =>
           // Find all actions permissible for current state
           val nextExpertAction = expert.chooseTransition(d, state)
@@ -106,6 +108,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
           // Compute a cost for each permissible action
           val costs = permissibleActions.map { l =>
+            
+            def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
+              (ex, if (expert.length > 0) expert(0) else false) match {
+                case (None, _) =>
+                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                  loss.max(d)
+                case (Some(structure), usedExpert) =>
+                  val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
+                  if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                  ll
+              }
+            }
+            
             (1 to options.NUM_SAMPLES).map { s =>
               // Create a copy of the state and apply the action for the cost calculation
               var stateCopy = state
@@ -113,26 +128,21 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               //        if (options.EXPERT_APPROXIMATION) {
               //          loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array(), expertActions)
               //        }
+              val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
               if (options.APPROXIMATE_LOSS) {
                 trans.approximateLoss(datum = d, state = state, action = l)
+              } else if (options.LOLSDet && policy.classifier != null) {
+                val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
+                val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
+                val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
+                val policyLoss = calculateAndLogLoss(sampledExLP, sampledActionsLP, Array(false), expertActionsFromHere, l, nextExpertAction)
+                (expertLoss + policyLoss) / 2.0
               } else {
                 // Unroll from current state until completion
-                val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
                 val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, prob) else (Some(d), Array[A](), Array[Boolean]())
-                // If the unrolling is successful, calculate loss with respect to gold structure
-                // Otherwise use the max cost
-                sampledEx match {
-                  case None =>
-                    if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
-                    loss.max(d)
-                  case Some(structure) =>
-                    val ll = loss(gold = d, test = structure, sampledActions, expertActionsFromHere, l, nextExpertAction)
-                    if (options.DEBUG) debug.write(f"Loss on action $l = $ll%.3f\n")
-                    ll
-                }
+                calculateAndLogLoss(sampledEx, sampledActions, expertInSample, expertActionsFromHere, l, nextExpertAction)
               }
             }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
-            //            }
           }
           // Reduce all costs until the min cost is 0
 
