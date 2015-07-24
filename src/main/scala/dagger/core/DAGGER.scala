@@ -110,6 +110,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           val costs = permissibleActions.map { l =>
             
             def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
+              if (options.ORACLE_LOSS) return 0.0  // as in this case nothing matters
               (ex, if (expert.length > 0) expert(0) else false) match {
                 case (None, _) =>
                   if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
@@ -131,7 +132,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
               if (options.APPROXIMATE_LOSS) {
                 trans.approximateLoss(datum = d, state = state, action = l)
-              } else if (options.LOLSDet && policy.classifier != null) {
+              } else if (options.LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
                 val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
                 val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
                 val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
