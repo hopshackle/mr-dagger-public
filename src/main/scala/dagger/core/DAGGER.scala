@@ -66,10 +66,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
     val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_"+ f"$prob%.3f" + ".txt")
+    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_" + f"$prob%.3f" + ".txt")
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
     val dataWithIndex = data.zipWithIndex
+    val MAX_ACTIONS = options.MAX_ACTIONS
 
     val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
       case (d, dcount) =>
@@ -100,76 +101,80 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         // For all actions used to predict the unrolled structure...
         //for (a <- predActions)
         loss.setSamples(options.NUM_SAMPLES * (if (options.LOLSDet) 2 else 1))
-        val allInstances = predActions.map { a =>
-          // Find all actions permissible for current state
-          val nextExpertAction = expert.chooseTransition(d, state)
-          if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
-          val permissibleActions = trans.permissibleActions(state)
+        val allInstances = predActions.zipWithIndex map {
+          case (a, actionNumber) =>
 
-          // Compute a cost for each permissible action
-          val costs = permissibleActions.map { l =>
-            
-            def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
-              if (options.ORACLE_LOSS) return 0.0  // as in this case nothing matters
-              (ex, if (expert.length > 0) expert(0) else false) match {
-                case (None, _) =>
-                  if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
-                  loss.max(d)
-                case (Some(structure), usedExpert) =>
-                  val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
-                  if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
-                  ll
+            // Find all actions permissible for current state
+            val nextExpertAction = expert.chooseTransition(d, state)
+            if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
+            val permissibleActions = trans.permissibleActions(state)
+
+            // Compute a cost for each permissible action
+            val costs = permissibleActions.map { l =>
+
+              def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
+                if (options.ORACLE_LOSS) return 0.0 // as in this case nothing matters
+                (ex, if (expert.length > 0) expert(0) else false) match {
+                  case (None, _) =>
+                    if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
+                    loss.max(d)
+                  case (Some(structure), usedExpert) =>
+                    val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
+                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                    ll
+                }
               }
+
+              (1 to options.NUM_SAMPLES).map { s =>
+                // Create a copy of the state and apply the action for the cost calculation
+                var stateCopy = state
+                stateCopy = l(stateCopy)
+                //        if (options.EXPERT_APPROXIMATION) {
+                //          loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array(), expertActions)
+                //        }
+                options.MAX_ACTIONS = MAX_ACTIONS - actionNumber
+                val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
+                if (options.APPROXIMATE_LOSS) {
+                  trans.approximateLoss(datum = d, state = state, action = l)
+                } else if (options.LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
+                  val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
+                  val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
+                  val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
+                  val policyLoss = calculateAndLogLoss(sampledExLP, sampledActionsLP, Array(false), expertActionsFromHere, l, nextExpertAction)
+                  expertLoss * prob + policyLoss * (1.0 - prob)
+                } else {
+                  // Unroll from current state until completion
+                  val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, prob) else (Some(d), Array[A](), Array[Boolean]())
+                  calculateAndLogLoss(sampledEx, sampledActions, expertInSample, expertActionsFromHere, l, nextExpertAction)
+                }
+              }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
             }
-            
-            (1 to options.NUM_SAMPLES).map { s =>
-              // Create a copy of the state and apply the action for the cost calculation
-              var stateCopy = state
-              stateCopy = l(stateCopy)
-              //        if (options.EXPERT_APPROXIMATION) {
-              //          loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array(), expertActions)
-              //        }
-              val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
-              if (options.APPROXIMATE_LOSS) {
-                trans.approximateLoss(datum = d, state = state, action = l)
-              } else if (options.LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
-                val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
-                val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
-                val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
-                val policyLoss = calculateAndLogLoss(sampledExLP, sampledActionsLP, Array(false), expertActionsFromHere, l, nextExpertAction)
-                (expertLoss + policyLoss) / 2.0
-              } else {
-                // Unroll from current state until completion
-                val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, prob) else (Some(d), Array[A](), Array[Boolean]())
-                calculateAndLogLoss(sampledEx, sampledActions, expertInSample, expertActionsFromHere, l, nextExpertAction)
-              }
-            }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
-          }
-          // Reduce all costs until the min cost is 0
+            // Reduce all costs until the min cost is 0
 
-          val min = costs.minBy(_ * 1.0)
-          val tempNormCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0 else 1.0) else costs.map(x => (x - min))
-          val normedCosts = if (tempNormCosts contains 0.0) tempNormCosts else (tempNormCosts map (x => 0.0)).toArray
-          if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
-          if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
-          if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
-          if (options.DEBUG) {
-            val minAction = permissibleActions(normedCosts.indexOf(0.0))
-            debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
-            debug.write("\n")
-            debug.flush()
-          }
-          // Construct new training instance with sampled losses
-          val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
-          val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-          val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
-          loss.clearCache
-          //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
+            val min = costs.minBy(_ * 1.0)
+            val tempNormCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0 else 1.0) else costs.map(x => (x - min))
+            val normedCosts = if (tempNormCosts contains 0.0) tempNormCosts else (tempNormCosts map (x => 0.0)).toArray
+            if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
+            if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
+            if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
+            if (options.DEBUG) {
+              val minAction = permissibleActions(normedCosts.indexOf(0.0))
+              debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
+              debug.write("\n")
+              debug.flush()
+            }
+            // Construct new training instance with sampled losses
+            val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
+            val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+            val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
+            loss.clearCache
+            //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
-          // Progress to next state in the predicted path
-          state = a(state)
-          instance
+            // Progress to next state in the predicted path
+            state = a(state)
+            instance
         }
+        options.MAX_ACTIONS = MAX_ACTIONS
         this.synchronized {
           processedSoFar += 1
           if (processedSoFar % options.DAGGER_PRINT_INTERVAL == 0) {
@@ -212,7 +217,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val expertUsed = new ArrayBuffer[Boolean]
     var state = start
     var actionsTaken = 0
-    while (!trans.isTerminal(state) && actionsTaken < 300) {
+    while (!trans.isTerminal(state) && actionsTaken < options.MAX_ACTIONS) {
       val permissibleActions = trans.permissibleActions(state)
       if (permissibleActions.isEmpty) {
         return (None, actions.toArray, expertUsed.toArray)

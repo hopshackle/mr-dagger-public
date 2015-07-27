@@ -57,7 +57,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   lazy val INITIAL_EXPERT_PROB = getDouble("--initialExpertProb", default = 1.0)
 
-  lazy val MAX_ACTIONS = getInt("--maxActions", default = 300)
+  var MAX_ACTIONS = getInt("--maxActions", default = 300)
 
   override def toString = {
     "DAGGER Options:\n" +
