@@ -160,6 +160,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             if (options.DEBUG) {
               val minAction = permissibleActions(normedCosts.indexOf(0.0))
               debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
+              if (!(permissibleActions contains nextExpertAction)) debug.write("Expert Action is not in permissible set.")
               debug.write("\n")
               debug.flush()
             }
