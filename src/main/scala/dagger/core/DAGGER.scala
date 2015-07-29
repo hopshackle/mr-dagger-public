@@ -186,7 +186,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     }.toArray
     if (options.DEBUG) debug.write(f"Mean Loss on test set:\t ${(lossOnTestSet reduce (_ + _)) / lossOnTestSet.size}%.3f")
     debug.close
-    allData
+    allData filter (_.costs.size > 1)
   }
 
   /**
