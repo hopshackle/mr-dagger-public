@@ -45,7 +45,16 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       instances ++= collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
       println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
-      classifier = trainFromInstances(instances, trans.actions, old = classifier)
+      classifier = if (options.PLOT_LOSS_PER_ITERATION) {
+        val allClassifiers = trainAndReturnAllClassifiers(instances, trans.actions, old = classifier)
+        if (dev.nonEmpty) {
+          allClassifiers foreach { c =>
+            stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](c), trans,
+              featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
+          }
+        }
+        allClassifiers(options.TRAIN_ITERATIONS)
+      } else trainFromInstances(instances, trans.actions, old = classifier)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
@@ -243,6 +252,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       state = a(state)
     }
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
+  }
+
+  def trainAndReturnAllClassifiers(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): Array[MultiClassClassifier[A]] = {
+    val totalIterations = options.TRAIN_ITERATIONS
+    options.TRAIN_ITERATIONS = 1
+    var lastClassifier = old
+    var output: Array[MultiClassClassifier[A]] = Array()
+    for (i <- 1 to totalIterations) {
+      var nextClassifier = trainFromInstances(instances, actions, lastClassifier)
+      lastClassifier = nextClassifier
+      output = output ++ Array(nextClassifier)
+    }
+    output
   }
 
   def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = {

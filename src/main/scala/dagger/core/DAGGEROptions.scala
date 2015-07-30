@@ -56,6 +56,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val LOLSDet = getBoolean("--LOLSDet", default = false)
 
   lazy val INITIAL_EXPERT_PROB = getDouble("--initialExpertProb", default = 1.0)
+  
+  lazy val PLOT_LOSS_PER_ITERATION = getBoolean("--plotLoss", default = false)
 
   var MAX_ACTIONS = getInt("--maxActions", default = 300)
 

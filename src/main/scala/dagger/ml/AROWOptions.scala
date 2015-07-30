@@ -20,7 +20,7 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
   lazy val SMOOTHING = getDouble("--arow.smoothing", 1.0)
 
-  lazy val TRAIN_ITERATIONS = getInt("--arow.iterations", 50)
+  var TRAIN_ITERATIONS = getInt("--arow.iterations", 50)
 
   lazy val TUNE_REGULARIZER = getBoolean("--tune.regularizer", default = false)
 
