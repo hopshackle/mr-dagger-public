@@ -51,9 +51,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   var ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
 
-  lazy val LOLS = getBoolean("--LOLS", default = false)
-
-  lazy val LOLSDet = getBoolean("--LOLSDet", default = false)
+  lazy val ALGORITHM = getString("--algorithm", default = "Dagger")
 
   lazy val INITIAL_EXPERT_PROB = getDouble("--initialExpertProb", default = 1.0)
   

@@ -68,6 +68,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
+
+    val Dagger = options.ALGORITHM == "Dagger" || options.ALGORITHM == "DILO" || options.ALGORITHM == "DILDO"
+    val LOLSDet = options.ALGORITHM == "LOLSDet" || options.ALGORITHM == "DILDO"
+    val LOLS = options.ALGORITHM == "LOLS" || options.ALGORITHM == "DILO"
     // Compute the probability of choosing the oracle policy in this round
     //      val prob = math.pow(1.0 - options.POLICY_DECAY, i-1)
     //      println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
@@ -109,7 +113,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         var state = trans.init(d)
         // For all actions used to predict the unrolled structure...
         //for (a <- predActions)
-        loss.setSamples(options.NUM_SAMPLES * (if (options.LOLSDet) 2 else 1))
+        loss.setSamples(options.NUM_SAMPLES * (if (LOLSDet) 2 else 1))
         val allInstances = predActions.zipWithIndex map {
           case (a, actionNumber) =>
 
@@ -145,7 +149,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                 val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
                 if (options.APPROXIMATE_LOSS) {
                   trans.approximateLoss(datum = d, state = state, action = l)
-                } else if (options.LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
+                } else if (LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
                   val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
                   val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
                   val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
@@ -218,10 +222,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
     // For Dagger we have no difference between Roll-In and Roll-Out. We always use expert with probability.
     // For LOLS we always Roll-In with the learned policy (if we have one, which we won't on the first iteration)
-    val prob = (options.LOLS, rollIn) match {
-      case (true, true) => if (classifierPolicy.classifier == null) 1.0 else 0.0
-      case (true, false) => if (classifierPolicy.classifier == null || Random.nextDouble < probability) 1.0 else 0.0
-      case (false, _) => probability
+    val prob = (options.ALGORITHM, rollIn) match {
+      case ("LOLS", true) | ("LOLSDet", true) => if (classifierPolicy.classifier == null) 1.0 else 0.0
+      case (_, true) => probability
+      case ("Dagger", false) => probability
+      case (_, false) => if (classifierPolicy.classifier == null || Random.nextDouble < probability) 1.0 else 0.0
     }
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]
