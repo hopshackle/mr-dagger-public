@@ -248,7 +248,7 @@ object AROW {
     for (d <- reducedFeatures; f <- d) fcounts(f._1) = fcounts(f._1) + f._2
 
     val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
-    println(s"A Total of ${rareFeats.size} features removed.")
+    println(s"A Total of ${rareFeats.size} features remaining, with ${fcounts.size - rareFeats.size} removed.")
     val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map
       (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })) map Instance.scalaMapToTrove))
     out
