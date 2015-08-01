@@ -234,13 +234,23 @@ object AROW {
 
   // Remove rare features
   def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Iterable[Instance[T]] = {
+    println("Rare Feature Count = " + count)
     if (count == 0) return data
+    println("Removing Rare Features")
     val fcounts = new collection.mutable.HashMap[Int, Double].withDefaultValue(0.0)
-    for (d <- data; m <- d.featureVector; f <- m) fcounts(f._1) = fcounts(f._1) + f._2
+    // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
+    val reducedFeatures = for {
+      d <- data
+      keys = d.featureVector map identity flatMap identity groupBy (_._1) mapValues (_.map(_._2))
+      maxValueMap = keys map { case (k, v) => (k, (v map Math.abs).max) }
+    } yield maxValueMap
+
+    for (d <- reducedFeatures; f <- d) fcounts(f._1) = fcounts(f._1) + f._2
+
     val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
+    println(s"A Total of ${rareFeats.size} features removed.")
     val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map
-      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })) map Instance.scalaMapToTrove
-      ))
+      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })) map Instance.scalaMapToTrove))
     out
   }
 

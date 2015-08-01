@@ -13,7 +13,7 @@ import gnu.trove.map.hash.THashMap
 
 case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], costs: Array[Float] = null) {
 
-  def featureVector = feats map (i => Instance.troveMapToScala(i))
+  lazy val featureVector = feats map (i => Instance.troveMapToScala(i))
 
   def costOf(l: T) = costs(labels.indexOf(l))
 
