@@ -40,7 +40,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
     val initialOracleLoss = options.ORACLE_LOSS
     for (i <- 1 to options.DAGGER_ITERATIONS) {
-      if (i == 1) options.ORACLE_LOSS = true else options.ORACLE_LOSS = initialOracleLoss
+      if (i == 1 && options.INITIAL_ORACLE_LOSS) options.ORACLE_LOSS = true else options.ORACLE_LOSS = initialOracleLoss
       val prob = if (i == 1) 1.0 else options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       instances ++= collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)

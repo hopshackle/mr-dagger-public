@@ -50,6 +50,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val UNROLL_EXPERT_FOR_LOSS = getBoolean("--unrollExpert", default = false)
 
   var ORACLE_LOSS = getBoolean("--oracleLoss", default = false)
+  
+  lazy val INITIAL_ORACLE_LOSS = getBoolean("--initialOracleLoss", default = false)
 
   lazy val ALGORITHM = getString("--algorithm", default = "Dagger")
 
