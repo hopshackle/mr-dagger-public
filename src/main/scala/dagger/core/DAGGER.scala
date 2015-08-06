@@ -113,7 +113,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         var state = trans.init(d)
         // For all actions used to predict the unrolled structure...
         //for (a <- predActions)
-        loss.setSamples(options.NUM_SAMPLES * (if (LOLSDet) 2 else 1))
+        loss.setSamples(options.NUM_SAMPLES * (if (LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) 2 else 1))
         val allInstances = predActions.zipWithIndex map {
           case (a, actionNumber) =>
 
