@@ -226,7 +226,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       case ("LOLS", true) | ("LOLSDet", true) => if (classifierPolicy.classifier == null) 1.0 else 0.0
       case (_, true) => probability
       case ("Dagger", false) => probability
-      case (_, false) => if (classifierPolicy.classifier == null || Random.nextDouble < probability) 1.0 else 0.0
+      case (_, false) => if (classifierPolicy.classifier == null || random.nextDouble < probability) 1.0 else 0.0
     }
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]

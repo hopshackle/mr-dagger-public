@@ -60,6 +60,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val PLOT_LOSS_PER_ITERATION = getBoolean("--plotLoss", default = false)
 
   var MAX_ACTIONS = getInt("--maxActions", default = 300)
+  
+  val WRITE_NAIVE_VAL_SCORES = getBoolean("--smatchScores", false)
 
   override def toString = {
     "DAGGER Options:\n" +
