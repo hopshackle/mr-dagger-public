@@ -159,7 +159,7 @@ object AROW {
           val confidence = preDot + minDot
 
           val beta = 1.0f / (confidence + smoothing.toFloat)
-          val loss = (maxScore - minCorrectScore + math.sqrt(icost)).toFloat
+          val loss = (maxScore - minCorrectScore + Math.sqrt(icost)).toFloat
           val alpha = loss * beta
 
           if (verbose) {
