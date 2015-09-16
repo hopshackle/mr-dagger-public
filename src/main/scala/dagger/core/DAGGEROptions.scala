@@ -62,6 +62,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   var MAX_ACTIONS = getInt("--maxActions", default = 300)
   
   val WRITE_NAIVE_VAL_SCORES = getBoolean("--smatchScores", false)
+  
+  val REDUCED_ACTION_SPACE = getBoolean("--reducedActions", false)
 
   override def toString = {
     "DAGGER Options:\n" +

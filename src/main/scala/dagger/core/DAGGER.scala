@@ -118,9 +118,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           case (a, actionNumber) =>
 
             // Find all actions permissible for current state
+            val allPermissibleActions = trans.permissibleActions(state)
             val nextExpertAction = expert.chooseTransition(d, state)
+            val nextPolicyAction = if (policy.classifier != null)
+              predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features)
+            else
+              allPermissibleActions(Random.nextInt(allPermissibleActions.size))
+
             if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
-            val permissibleActions = trans.permissibleActions(state)
+
+            val permissibleActions = options.REDUCED_ACTION_SPACE match {
+              case true => Array(nextExpertAction, nextPolicyAction)
+              case false => allPermissibleActions
+            }
 
             // Compute a cost for each permissible action
             val costs = permissibleActions.map { l =>
@@ -240,13 +250,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val policy = if (random.nextDouble() <= prob) { expertUsed += true; expertPolicy } else { expertUsed += false; classifierPolicy }
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
-        case y: ProbabilisticClassifierPolicy[D, A, S] => {
-          val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-          val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
-            permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
-          val prediction = y.predict(ex, instance, state)
-          if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
-        }
+        case y: ProbabilisticClassifierPolicy[D, A, S] => predictUsingPolicy(ex, state, y, permissibleActions, featureFunction)
       }
 
       actions += a
@@ -257,6 +261,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       state = a(state)
     }
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
+  }
+
+  def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A], featureFunction: (D, S, A) => THashMap[Int, Float]): A = {
+    val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+    val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
+      permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
+    val prediction = policy.predict(ex, instance, state)
+    if (prediction.size > 1) prediction(scala.util.Random.nextInt(prediction.size)) else prediction.head
   }
 
   def trainAndReturnAllClassifiers(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): Array[MultiClassClassifier[A]] = {

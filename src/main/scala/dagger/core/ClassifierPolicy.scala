@@ -1,7 +1,6 @@
 package dagger.core
 
-import dagger.ml.{Instance, MultiClassClassifier}
-
+import dagger.ml.{ Instance, MultiClassClassifier }
 
 /**
  * Created by narad on 6/19/14.
@@ -20,6 +19,7 @@ abstract class HeuristicPolicy[D, A <: TransitionAction[S], S <: TransitionState
 case class ProbabilisticClassifierPolicy[D, A <: TransitionAction[S], S <: TransitionState](classifier: MultiClassClassifier[A]) extends Policy[D, A, S] {
 
   def predict(ex: D, instance: Instance[A], state: S): Seq[A] = {
-      classifier.predict(instance).maxLabels
+    classifier.predict(instance).maxLabels
   }
+
 }
