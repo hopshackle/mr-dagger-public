@@ -3,11 +3,8 @@ package dagger.ml
 import java.io.{ File, FileWriter }
 
 import collection.mutable.HashMap
-// import java.util.HashMap
 import scala.reflect.ClassTag
 import scala.util.Random
-//import collection.immutable.Map
-//import scala.collection.JavaConversions.mapAsScalaMap
 
 /**
  * Created with IntelliJ IDEA.
