@@ -122,13 +122,14 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val nextExpertAction = expert.chooseTransition(d, state)
             val nextPolicyAction = if (policy.classifier != null)
               predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features)
-            else
-              allPermissibleActions(Random.nextInt(allPermissibleActions.size))
-
-            if (options.DEBUG) { debug.write(state + "\n"); debug.flush }
+            else {
+              val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction}
+              if (excludingExpertChoice.size > 0) excludingExpertChoice(Random.nextInt(excludingExpertChoice.size)) else nextExpertAction
+            }
+            if (options.DEBUG) { debug.write(state + "\n"); debug.write("Expert Action: " + nextExpertAction + "\n"); debug.flush }
 
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
-              case true => Array(nextExpertAction, nextPolicyAction)
+              case true => if (nextExpertAction == nextPolicyAction) Array(nextExpertAction) else Array(nextExpertAction, nextPolicyAction)
               case false => allPermissibleActions
             }
 
@@ -175,11 +176,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             // Reduce all costs until the min cost is 0
 
             val min = costs.minBy(_ * 1.0)
-            val tempNormCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0 else 1.0) else costs.map(x => (x - min))
-            val normedCosts = if (tempNormCosts contains 0.0) tempNormCosts else (tempNormCosts map (x => 0.0)).toArray
+            val normedCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0 else 1.0) else costs.map(x => (x - min))
             if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
             if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
             if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
+            if (options.DEBUG) debug.flush()
             if (options.DEBUG) {
               val minAction = permissibleActions(normedCosts.indexOf(0.0))
               debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
