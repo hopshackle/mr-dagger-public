@@ -123,13 +123,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val nextPolicyAction = if (policy.classifier != null)
               predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features)
             else {
-              val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction}
+              val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
               if (excludingExpertChoice.size > 0) excludingExpertChoice(Random.nextInt(excludingExpertChoice.size)) else nextExpertAction
             }
-            if (options.DEBUG) { debug.write(state + "\n"); debug.write("Expert Action: " + nextExpertAction + "\n"); debug.flush }
-
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
-              case true => if (nextExpertAction == nextPolicyAction) Array(nextExpertAction) else Array(nextExpertAction, nextPolicyAction)
+              case true => if (nextExpertAction == nextPolicyAction) Array(nextExpertAction) else Array(nextPolicyAction, nextExpertAction)
               case false => allPermissibleActions
             }
 
@@ -137,7 +135,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val costs = permissibleActions.map { l =>
 
               def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
-                if (options.ORACLE_LOSS) return 0.0 // as in this case nothing matters
+                if (options.ORACLE_LOSS) return if (l == nextExpertAction) 0.0 else 1.0
                 (ex, if (expert.length > 0) expert(0) else false) match {
                   case (None, _) =>
                     if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
@@ -176,7 +174,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             // Reduce all costs until the min cost is 0
 
             val min = costs.minBy(_ * 1.0)
-            val normedCosts = if (options.ORACLE_LOSS) permissibleActions.map(pa => if (pa == nextExpertAction) 0.0 else 1.0) else costs.map(x => (x - min))
+            val normedCosts = costs.map(x => (x - min))
             if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
             if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
             if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
@@ -189,9 +187,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               debug.flush()
             }
             // Construct new training instance with sampled losses
+            //TODO: We're keeping too many copies of features. We can dump those that are identical
             val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
             val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
             val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
+          //  println(f"${permissibleActions.mkString(",")}, maxCost ${instance.maxCost}%.2f, minCost ${instance.minCost}%.2f, correctLabels ${instance.correctLabels}")
             loss.clearCache
             //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 

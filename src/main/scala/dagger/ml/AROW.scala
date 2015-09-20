@@ -91,6 +91,8 @@ object AROW {
       averaging = options.AVERAGING,
       smoothing = smoothing,
       init = model,
+      printInterval = options.AROW_PRINT_INTERVAL,
+      verbose = options.VERBOSE,
       random = random)
   }
 
@@ -106,6 +108,7 @@ object AROW {
     timer.start
     var classifier = new AROWClassifier[T](weightVectors, varianceVectors)
     for (r <- 1 to rounds) {
+      if (verbose) println("Starting round " + r)
       val instances = if (shuffle) random.shuffle(data) else data
       var errors = 0.0
       for ((instance, i) <- instances.view.zipWithIndex) {
@@ -117,6 +120,7 @@ object AROW {
         val maxLabel = prediction.maxLabel
         val maxScore = prediction.maxScore
         val icost = instance.costOf(maxLabel)
+        if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
         if (instance.costOf(maxLabel) > 0) {
           errors += 1
 
