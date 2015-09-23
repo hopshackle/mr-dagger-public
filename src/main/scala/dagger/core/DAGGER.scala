@@ -28,6 +28,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
     score: Iterable[(D, D)] => List[(String, Double)],
+    actionToString: (A => String) = null,
+    stringToAction: (String => A) = null,
     utilityFunction: (DAGGEROptions, String, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
@@ -35,7 +37,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
     //  def features = (d: D, s: S, a: A) => Map[Int, Double]()
     // Begin DAGGER training
-    val instances = new ArrayBuffer[Instance[A]]
+    var instances = new ArrayBuffer[Instance[A]]
     var classifier = null.asInstanceOf[MultiClassClassifier[A]]
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
     val initialOracleLoss = options.ORACLE_LOSS
@@ -43,18 +45,35 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (i == 1 && options.INITIAL_ORACLE_LOSS) options.ORACLE_LOSS = true else options.ORACLE_LOSS = initialOracleLoss
       val prob = if (i == 1) 1.0 else options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      instances ++= collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
-      println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
-      classifier = if (options.PLOT_LOSS_PER_ITERATION) {
-        val allClassifiers = trainAndReturnAllClassifiers(instances, trans.actions, old = classifier)
-        if (dev.nonEmpty) {
-          allClassifiers foreach { c =>
-            stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](c), trans,
-              featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
-          }
+      val newInstances = collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
+      if (actionToString != null) {
+        // write to file
+        val fileName = options.DAGGER_OUTPUT_PATH + "Instances_" + i + ".txt"
+        val file = new FileWriter(fileName)
+        for (i <- newInstances) {
+          file.write(i.fileFormat(actionToString))
         }
-        allClassifiers(options.TRAIN_ITERATIONS)
-      } else trainFromInstances(instances, trans.actions, old = classifier)
+        file.close
+      }
+      if (stringToAction == null) {
+        instances ++= newInstances
+        println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
+        classifier = if (options.PLOT_LOSS_PER_ITERATION) {
+          val allClassifiers = trainAndReturnAllClassifiers(instances, trans.actions, old = classifier)
+          if (dev.nonEmpty) {
+            allClassifiers foreach { c =>
+              stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](c), trans,
+                featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
+            }
+          }
+          allClassifiers(options.TRAIN_ITERATIONS)
+        } else trainFromInstances(instances, trans.actions, old = classifier)
+      } else {
+        // load from file - FileInstances is an Iterable that only loads each file as needed
+        val fileNames = ((1 to i) map (iter => options.DAGGER_OUTPUT_PATH + "Instances_" + iter + ".txt")).toList
+        classifier = trainFromInstances(new FileInstances(fileNames, stringToAction), trans.actions, old = classifier)
+      }
+
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
@@ -78,7 +97,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     // Keep statistics on # of failed unrolls and the accuracy of predicted structures
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
-    val file = if (options.SERIALIZE) new FileWriter(options.DAGGER_OUTPUT_PATH + options.DAGGER_SERIALIZE_FILE) else null
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_" + f"$prob%.3f" + ".txt")
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
@@ -132,7 +150,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
 
             // Compute a cost for each permissible action
-            val costs = permissibleActions.map { l =>
+            // if just one action, then we can save some time in not rolling out
+            val costs = if (permissibleActions.size == 1) Array(0.0) else permissibleActions.map { l =>
 
               def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
                 if (options.ORACLE_LOSS) return if (l == nextExpertAction) 0.0 else 1.0
@@ -191,7 +210,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
             val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
             val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
-          //  println(f"${permissibleActions.mkString(",")}, maxCost ${instance.maxCost}%.2f, minCost ${instance.minCost}%.2f, correctLabels ${instance.correctLabels}")
+            //  println(f"${permissibleActions.mkString(",")}, maxCost ${instance.maxCost}%.2f, minCost ${instance.minCost}%.2f, correctLabels ${instance.correctLabels}")
             loss.clearCache
             //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
@@ -290,8 +309,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     options.CLASSIFIER match {
       case "AROW" => {
         old match {
-          case c: AROWClassifier[A] => AROW.train[A](instances, actions, weightLabels, options, Some(c))
-          case _ => AROW.train[A](instances, actions, weightLabels, options)
+          case c: AROWClassifier[A] => AROW.train[A](instances, weightLabels, options, Some(c))
+          case _ => AROW.train[A](instances, weightLabels, options)
         }
       }
       case "PASSIVE_AGGRESSIVE" => ??? //PassiveAggressive.train[A](instances, actions, options.RATE, random, options)

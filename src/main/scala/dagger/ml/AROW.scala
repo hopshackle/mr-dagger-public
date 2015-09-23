@@ -44,7 +44,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
 
 object AROWClassifier {
 
-  def empty[T: ClassTag](labels: Array[T] = Array(), weightLabels: Array[T]): AROWClassifier[T] = {
+  def empty[T: ClassTag](weightLabels: Array[T]): AROWClassifier[T] = {
     val weights = new HashMap[T, HashMap[Int, Float]]
     val variances = new HashMap[T, HashMap[Int, Float]]
     for (l <- weightLabels) {
@@ -72,15 +72,15 @@ object AROWClassifier {
 
 object AROW {
 
-  def train[T: ClassTag](data: Iterable[Instance[T]], labels: Array[T], weightLabels: Array[T], options: AROWOptions, init: Option[AROWClassifier[T]] = None): AROWClassifier[T] = {
+  def train[T: ClassTag](data: Iterable[Instance[T]], weightLabels: Array[T], options: AROWOptions, init: Option[AROWClassifier[T]] = None): AROWClassifier[T] = {
     val pruned = removeRareFeatures(data, options.RARE_FEATURE_COUNT)
     val random = new Random(options.RANDOM_SEED)
     val model = init match {
       case Some(arow) => arow
-      case None => AROWClassifier.empty[T](labels = labels, weightLabels = weightLabels)
+      case None => AROWClassifier.empty[T](weightLabels = weightLabels)
     }
     val smoothing = if (options.TUNE_REGULARIZER) {
-      tuneSmoothingParameter(data = pruned, labels = labels, weightLabels = weightLabels, init = model, random)
+      tuneSmoothingParameter(data = pruned, weightLabels = weightLabels, init = model, random)
     } else {
       options.SMOOTHING
     }
@@ -120,8 +120,8 @@ object AROW {
         val maxLabel = prediction.maxLabel
         val maxScore = prediction.maxScore
         val icost = instance.costOf(maxLabel)
-        if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
-        if (instance.costOf(maxLabel) > 0) {
+ //       if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
+        if (icost > 0.0) {
           errors += 1
 
           // correctLabels is an array of all those with cost of 0.0
@@ -255,7 +255,7 @@ object AROW {
     out
   }
 
-  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], labels: Array[T], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
+  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
     val (rtrain, rdev) = random.shuffle(data).partition(x => random.nextDouble() < 0.9)
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad
