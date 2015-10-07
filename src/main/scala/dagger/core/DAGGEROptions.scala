@@ -64,6 +64,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   val WRITE_NAIVE_VAL_SCORES = getBoolean("--smatchScores", false)
   
   val REDUCED_ACTION_SPACE = getBoolean("--reducedActions", false)
+  
+  val ROLLOUT_THRESHOLD = getDouble("--threshold", 0.0)
 
   override def toString = {
     "DAGGER Options:\n" +

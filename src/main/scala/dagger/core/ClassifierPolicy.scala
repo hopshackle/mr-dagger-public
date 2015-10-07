@@ -18,8 +18,11 @@ abstract class HeuristicPolicy[D, A <: TransitionAction[S], S <: TransitionState
 
 case class ProbabilisticClassifierPolicy[D, A <: TransitionAction[S], S <: TransitionState](classifier: MultiClassClassifier[A]) extends Policy[D, A, S] {
 
-  def predict(ex: D, instance: Instance[A], state: S): Seq[A] = {
-    classifier.predict(instance).maxLabels
+  def predict(ex: D, instance: Instance[A], state: S, threshold: Double = 0.0): Seq[A] = {
+    if (threshold == 0.0)
+      classifier.predict(instance).maxLabels
+    else
+      classifier.predict(instance).maxLabelsWithinThreshold(threshold)
   }
 
 }
