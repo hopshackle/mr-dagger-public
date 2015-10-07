@@ -27,6 +27,8 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
   lazy val AVERAGING = getBoolean("--average", default = false)
 
   lazy val VERBOSE = getBoolean("--verbose", default = false)
+  
+  lazy val SHENANIGAN = getDouble("--shenanigan", 0.0)
 
   override def toString = {
     "AROW OPTIONS:\n" +

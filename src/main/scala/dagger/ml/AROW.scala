@@ -31,7 +31,6 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
   def weightOf(a: T, p: Int): Float = weights(a).getOrElse(p, 0.0f)
 
   def writeToFile(filename: String) = {
-    println("Labels: " + weights.keys.mkString(", "))
     val file = new File(filename)
     if (!file.getParentFile.exists()) file.getParentFile.mkdirs()
     val out = new FileWriter(filename)
@@ -93,20 +92,16 @@ object AROW {
       init = model,
       printInterval = options.AROW_PRINT_INTERVAL,
       verbose = options.VERBOSE,
-      random = random)
+      random = random,
+      shenanigan = options.SHENANIGAN)
   }
 
   private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rounds: Int, smoothing: Double = 1.0, shuffle: Boolean = true,
-    averaging: Boolean = false, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random): AROWClassifier[T] = {
+    averaging: Boolean = false, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random, shenanigan: Double = 0.0): AROWClassifier[T] = {
     // Initialize weight and variance vectors
-    val weightVectors = init.weights // new HashMap[T, HashMap[Int, Double]]()
-    val varianceVectors = init.variances //new HashMap[T, HashMap[Int, Double]]()
-
-    // If averaging, then need to retain weight and varianceVectors for each instance separately
-    // would be more memory efficient to train each instance for relevant number of rounds, and then incrementally average
-    // the final - although to be fair, a weight vector trained on one instance will be very sparse.
-    // ...but on the second round of training this will no longer be true
-
+    val weightVectors = init.weights 
+    val varianceVectors = init.variances 
+    
     // Begin training loop
     println("Beginning %d rounds of training with %d instances and smoothing parameter %.2f.".format(rounds, data.size, smoothing))
     val timer = new dagger.util.Timer
@@ -119,12 +114,17 @@ object AROW {
       if (verbose) println("Starting round " + r)
       val instances = if (shuffle) random.shuffle(data) else data
       for ((instance, i) <- instances.view.zipWithIndex) {
+        if (verbose) println("Instance " + i)
         for (r2 <- 1 to (if (averaging) rounds else 1)) {
           val actualRound = math.max(r, r2)
-          val (e, newClassifier) = innerLoop(i, actualRound, instance, smoothing, classifier, printInterval, verbose, random)
+          val (e, newClassifier) = innerLoop(i, actualRound, instance, smoothing, classifier, printInterval, verbose, random, shenanigan)
           classifier = newClassifier
-          averagedClassifier = average(averagedClassifier, newClassifier, r2)
           errors(actualRound - 1) += e
+        }
+        if (averaging) {
+          averagedClassifier = if (i == 0) classifier else average(averagedClassifier, classifier, i)
+          classifier = averagedClassifier
+          if (verbose) println("Have averaged")
         }
       }
       if (verbose && !averaging) println("Training error in round %d : %1.2f".format(r, (100 * errors(r - 1) / data.size)))
@@ -155,7 +155,7 @@ object AROW {
   }
 
   def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], smoothing: Double, classifier: AROWClassifier[T],
-    printInterval: Int, verbose: Boolean, random: Random): (Double, AROWClassifier[T]) = {
+    printInterval: Int, verbose: Boolean, random: Random, shenanigan: Double): (Double, AROWClassifier[T]) = {
 
     var errors = 0.0
     if (printInterval > 0 && i % printInterval == 0) print("\rRound %d...instance %d...".format(r, i))
@@ -190,24 +190,26 @@ object AROW {
       val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
       //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
       for (feat <- instance.featureVector(iMaxLabel).keys) {
-        //AV: The if is not needed here, you do it with getOrElse right?
-        if (varianceVectors.contains(maxWeightLabel)) {
-          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
-        } else {
-          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
-        }
+        zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
       }
       for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
-        //AV: The if is not needed here, you do it with getOrElse right?
-        if (varianceVectors.contains(minCorrectWeightLabel)) {
-          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
-        } else {
-          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
-        }
+        zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
       }
+      
+      // If we had a shenanigan feature with value 1.0, then this would be unique for each of maxLabel and minCorrectLabel.
+      // We do not need to update any value for its weight, as by definition it will never be used again.
+      // Its impact is purely on the confidence weighting, as we have an additional variance value of the default of 1.0 in each case
+      // Hence the impact of the shenanigan is simply to add a constant to each of preDot and minDot
+      // BUT - this is exactly the same as increasing smoothing!!!!)
+      
+      // OK...but if we had a shenanigan feature, then this weight would be updated, and on the next iteration through this training
+      // instance this would increase the likelihood of selecting the correct answer - which would mean that the weights are less likely
+      // to be updated on future iterations (also a regularisation impact). If this is the case, then I would expect shenanigans to have no impact on 
+      // a single AROW iteration and a single Dagger iteration.
+      
 
-      val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
-      val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
+      val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted) + shenanigan.toFloat
+      val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect) + shenanigan.toFloat
       val confidence = preDot + minDot
 
       val beta = 1.0f / (confidence + smoothing.toFloat)
