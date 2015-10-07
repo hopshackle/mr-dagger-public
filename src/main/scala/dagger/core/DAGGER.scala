@@ -70,7 +70,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         } else trainFromInstances(instances, trans.actions, old = classifier)
       } else {
         // load from file - FileInstances is an Iterable that only loads each file as needed
-        val fileNames = ((1 to i) map (iter => options.DAGGER_OUTPUT_PATH + "Instances_" + iter + ".txt")).toList
+        val startingInstances = math.max(1, i - options.PREVIOUS_ITERATIONS_TO_USE)
+        val fileNames = ((startingInstances to i) map (iter => options.DAGGER_OUTPUT_PATH + "Instances_" + iter + ".txt")).toList
         classifier = trainFromInstances(new FileInstances(fileNames, stringToAction), trans.actions, old = classifier)
       }
 
