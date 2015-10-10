@@ -190,10 +190,16 @@ object AROW {
       val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
       //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
       for (feat <- instance.featureVector(iMaxLabel).keys) {
-        zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
+        if (varianceVectors.contains(maxWeightLabel))
+          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
+        else
+          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
       }
       for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
-        zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
+        if (varianceVectors.contains(minCorrectWeightLabel))
+          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
+        else
+          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
       }
       
       // If we had a shenanigan feature with value 1.0, then this would be unique for each of maxLabel and minCorrectLabel.

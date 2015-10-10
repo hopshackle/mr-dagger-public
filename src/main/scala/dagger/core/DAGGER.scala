@@ -58,19 +58,23 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (stringToAction == null) {
         instances ++= newInstances
         println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
-        classifier = if (options.PLOT_LOSS_PER_ITERATION) {
-          val allClassifiers = trainAndReturnAllClassifiers(instances, trans.actions, old = classifier)
-          if (dev.nonEmpty) {
-            allClassifiers foreach { c =>
-              stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](c), trans,
-                featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
-            }
+        if (options.PLOT_LOSS_PER_ITERATION) {
+          val totalIterations = options.TRAIN_ITERATIONS
+          options.TRAIN_ITERATIONS = 1
+          for (i <- 1 to totalIterations) {
+            classifier = trainFromInstances(instances, trans.actions, old = classifier)
+            if (dev.nonEmpty) stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
+              featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
           }
-          allClassifiers(options.TRAIN_ITERATIONS)
-        } else trainFromInstances(instances, trans.actions, old = classifier)
+          options.TRAIN_ITERATIONS = totalIterations
+        } else {
+          classifier = trainFromInstances(instances, trans.actions, old = classifier)
+        }
+
       } else {
         // load from file - FileInstances is an Iterable that only loads each file as needed
         val startingInstances = math.max(1, i - options.PREVIOUS_ITERATIONS_TO_USE)
+        println("Starting from " + startingInstances)
         val fileNames = ((startingInstances to i) map (iter => options.DAGGER_OUTPUT_PATH + "Instances_" + iter + ".txt")).toList
         classifier = trainFromInstances(new FileInstances(fileNames, stringToAction), trans.actions, old = classifier)
       }
@@ -293,19 +297,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
     val prediction = policy.predict(ex, instance, state, threshold)
     prediction
-  }
-
-  def trainAndReturnAllClassifiers(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): Array[MultiClassClassifier[A]] = {
-    val totalIterations = options.TRAIN_ITERATIONS
-    options.TRAIN_ITERATIONS = 1
-    var lastClassifier = old
-    var output: Array[MultiClassClassifier[A]] = Array()
-    for (i <- 1 to totalIterations) {
-      var nextClassifier = trainFromInstances(instances, actions, lastClassifier)
-      lastClassifier = nextClassifier
-      output = output ++ Array(nextClassifier)
-    }
-    output
   }
 
   def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = {
