@@ -78,7 +78,7 @@ class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: Tran
     val classifier = helperDagger.trainFromInstances(inst, trans.actions, null)
     val policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
 
-    if (dev.nonEmpty) helperDagger.stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score)
+    if (dev.nonEmpty) helperDagger.stats(data, 1, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score)
 
     classifier
   }

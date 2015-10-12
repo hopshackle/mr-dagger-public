@@ -61,9 +61,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         if (options.PLOT_LOSS_PER_ITERATION) {
           val totalIterations = options.TRAIN_ITERATIONS
           options.TRAIN_ITERATIONS = 1
-          for (i <- 1 to totalIterations) {
+          for (j <- 1 to totalIterations) {
             classifier = trainFromInstances(instances, trans.actions, old = classifier)
-            if (dev.nonEmpty) stats(data, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
+            if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
               featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
           }
           options.TRAIN_ITERATIONS = totalIterations
@@ -82,7 +82,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
+      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
     }
     classifier
   }
@@ -123,7 +123,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
         val totalLoss = predEx match {
           case None => 1.0
-          case Some(output) => if (utilityFunction != null) utilityFunction(options, "training_ " + iteration.toString, dcount + 1, output); loss(output, d, predActions, expertActions)
+          case Some(output) => if (utilityFunction != null) utilityFunction(options, "instanceCollection_" + iteration.toString, dcount + 1, output); loss(output, d, predActions, expertActions)
         }
         this.synchronized {
           lossOnTestSet = totalLoss :: lossOnTestSet
@@ -325,15 +325,15 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
+  def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
     lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
     timer.start()
 
-    val (validationLoss, validationScore) = helper(validationData, policy, trans, features, loss, score, utilityFunction)
-    val (trainingLoss, trainingScore) = helper(trainingData, policy, trans, features, loss, score)
+    val (validationLoss, validationScore) = helper(validationData, "val", iter, policy, trans, features, loss, score, utilityFunction)
+    val (trainingLoss, trainingScore) = helper(trainingData, "trng", iter, policy, trans, features, loss, score, utilityFunction)
 
     println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.3f")
     println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.3f")
@@ -342,7 +342,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     println(s"Time taken for validation:\t$timer")
   }
 
-  def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
+  def helper(data: Iterable[D], postfix: String, iter: Integer, policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
     features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
     utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null): (Double, List[(String, Double)]) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
@@ -352,7 +352,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
-            if (utilityFunction != null) utilityFunction(options, "val", (index + 1), structure)
+            if (utilityFunction != null) utilityFunction(options, postfix + "_" + iter, (index + 1), structure)
             if (options.DEBUG) {
               debug.write("Target = " + d + "\n")
               debug.write("Prediction = " + structure + "\n")
