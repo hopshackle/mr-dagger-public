@@ -28,7 +28,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     lossFactory: LossFunctionFactory[D, A, S],
     dev: Iterable[D] = Iterable.empty,
     score: Iterable[(D, D)] => List[(String, Double)],
-    utilityFunction: (DAGGEROptions, String, D) => Unit = null): MultiClassClassifier[A] = {
+    utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
@@ -65,7 +65,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
     featureFactory: FeatureFunctionFactory[D, S, A], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
-    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, D) => Unit): Array[Instance[A]] = {
+    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, Integer, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
 
@@ -100,7 +100,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
         val totalLoss = predEx match {
           case None => 1.0
-          case Some(output) => if (utilityFunction != null) utilityFunction(options, iteration + "_" + (dcount + 1).toString, output); loss(output, d, predActions, expertActions)
+          case Some(output) => if (utilityFunction != null) utilityFunction(options, "training_ " + iteration.toString, dcount + 1, output); loss(output, d, predActions, expertActions)
         }
         this.synchronized {
           lossOnTestSet = totalLoss :: lossOnTestSet
@@ -130,7 +130,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
               case true => if (nextExpertAction == nextPolicyAction) Array(nextExpertAction) else Array(nextExpertAction, nextPolicyAction)
-              case false => allPermissibleActions
+              case false => if (allPermissibleActions contains nextExpertAction) allPermissibleActions else allPermissibleActions :+ nextExpertAction
             }
 
             // Compute a cost for each permissible action
@@ -311,7 +311,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def stats(trainingData: Iterable[D], validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
-    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, D) => Unit = null) = {
+    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
@@ -329,7 +329,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def helper(data: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
     features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
-    utilityFunction: (DAGGEROptions, String, D) => Unit = null): (Double, List[(String, Double)]) = {
+    utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null): (Double, List[(String, Double)]) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {
@@ -337,7 +337,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
-            if (utilityFunction != null) utilityFunction(options, "val_" + (index + 1), structure)
+            if (utilityFunction != null) utilityFunction(options, "val", (index + 1), structure)
             if (options.DEBUG) {
               debug.write("Target = " + d + "\n")
               debug.write("Prediction = " + structure + "\n")
