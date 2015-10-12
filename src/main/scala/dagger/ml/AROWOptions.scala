@@ -7,7 +7,7 @@ import dagger.util.ArgParser
  */
 class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
-  lazy val AROW_PRINT_INTERVAL = getInt("arow.print.interval", 1000)
+  lazy val AROW_PRINT_INTERVAL = getInt("arow.print.interval", 100000)
   // A feature is considered rare, and may be removed if it occurs
   // less than this number of times in the training set.
   lazy val RARE_FEATURE_COUNT = getInt("--rare.feat.count", 0)
@@ -26,7 +26,9 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
   lazy val AVERAGING = getBoolean("--average", default = false)
 
-  lazy val VERBOSE = getBoolean("--verbose", default = true)
+  lazy val VERBOSE = getBoolean("--verbose", default = false)
+  
+  lazy val SHENANIGAN = getDouble("--shenanigan", 0.0)
 
   override def toString = {
     "AROW OPTIONS:\n" +

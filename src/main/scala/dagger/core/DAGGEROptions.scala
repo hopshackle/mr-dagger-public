@@ -63,7 +63,11 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   
   val WRITE_NAIVE_VAL_SCORES = getBoolean("--smatchScores", false)
   
-  val REDUCED_ACTION_SPACE = getBoolean("--reducedActions", false)
+  lazy val REDUCED_ACTION_SPACE = getBoolean("--reducedActions", false)
+  
+  lazy val ROLLOUT_THRESHOLD = getDouble("--threshold", 0.0)
+  
+  lazy val PREVIOUS_ITERATIONS_TO_USE = getInt("--previousTrainingIter", 100)
 
   override def toString = {
     "DAGGER Options:\n" +

@@ -10,7 +10,7 @@ import gnu.trove.map.hash.THashMap
  * Date: 5/23/14
  * Time: 2:43 PM
  */
-
+// A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag
 case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], costs: Array[Float] = null) {
 
   lazy val featureVector = feats map (i => Instance.troveMapToScala(i))
@@ -24,6 +24,15 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
   lazy val correctLabels = labels.zip(costs).filter(_._2 == 0).map(_._1)
 
   lazy val correctCost = 0.0
+
+  def fileFormat(actionToString: (T => String)): String = {
+    val actionSize = feats.size + "\n"
+    val featureOutput = ((0 until feats.size) map (i => featureVector(i) map (f => f"${f._1}:${f._2}%.2f") mkString ("\t")) mkString ("\n")) + "\n"
+    val labelOutput = (labels map actionToString mkString ("\t")) + "\n"
+    val weightLabelOutput = (weightLabels map actionToString mkString ("\t")) + "\n"
+    val costOutput = (costs map { c => f"${c}%.4f" } mkString ("\t")) + "\n"
+    actionSize + featureOutput + labelOutput + weightLabelOutput + costOutput + "END\n"
+  }
 
   override def toString = {
     "Instance:%s\n".format((0 until feats.size).map {
@@ -43,6 +52,18 @@ object Instance {
     val scosts = (ilabels, icosts, feats).zipped.toList.sortBy(_._2)
     var (maxCost, minCost) = (scosts.head._2, scosts.last._2)
     new Instance[T](scosts.map(_._3), scosts.map(_._1).toArray, scosts.map(_._1).toArray, scosts.map(_._2 - minCost).toArray) //, correct.zipWithIndex.filter(p => p._1).toArray.head._2)
+  }
+
+  def construct[T: ClassTag](input: String, stringToAction: (String => T)): Instance[T] = {
+    // input is in the same format as that constructed by fileFormat function
+    val inputSplit = input.split("\n")
+    val actionSize = inputSplit(0).toInt
+    val features = ((1 to actionSize) map (i =>
+      scalaMapToTrove((inputSplit(i).split("\t") map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) }).toMap))).toList
+    val labels = inputSplit(actionSize + 1).split("\t") map stringToAction
+    val weightLabels = inputSplit(actionSize + 2).split("\t") map stringToAction
+    val costs = inputSplit(actionSize + 3).split("\t") map { i => i.toFloat }
+    new Instance[T](features, labels, weightLabels, costs)
   }
 
   def troveMapToScala(trove: gnu.trove.map.hash.THashMap[Int, Float]): Map[Int, Float] = {
