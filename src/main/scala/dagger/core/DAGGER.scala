@@ -56,6 +56,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         file.close
       }
       if (stringToAction == null) {
+        val starting = instances.size
+        instances = instances filter (i => i.getErrorCount < options.INSTANCE_ERROR_MAX)
+        println(starting - instances.size + " instances dropped for exceeding error threshold.")
         instances ++= newInstances
         println("DAGGER iteration - training classifier on " + instances.size + " total instances.")
         if (options.PLOT_LOSS_PER_ITERATION) {
@@ -291,8 +294,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
 
-  def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A], 
-      featureFunction: (D, S, A) => THashMap[Int, Float], threshold: Double): Seq[A] = {
+  def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A],
+    featureFunction: (D, S, A) => THashMap[Int, Float], threshold: Double): Seq[A] = {
     val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
     val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
       permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))

@@ -24,6 +24,8 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
   lazy val correctLabels = labels.zip(costs).filter(_._2 == 0).map(_._1)
 
   lazy val correctCost = 0.0
+  
+  var errors = 0
 
   def fileFormat(actionToString: (T => String)): String = {
     val actionSize = feats.size + "\n"
@@ -33,6 +35,11 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
     val costOutput = (costs map { c => f"${c}%.4f" } mkString ("\t")) + "\n"
     actionSize + featureOutput + labelOutput + weightLabelOutput + costOutput + "END\n"
   }
+  
+  def errorIncrement: Unit = {
+    errors +=1
+  }
+  def getErrorCount: Int = errors
 
   override def toString = {
     "Instance:%s\n".format((0 until feats.size).map {

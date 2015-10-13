@@ -85,39 +85,37 @@ object AROW {
     }
     trainFromClassifier(
       data = pruned,
-      rounds = options.TRAIN_ITERATIONS,
-      shuffle = options.SHUFFLE,
-      averaging = options.AVERAGING,
-      smoothing = smoothing,
+      options = options,
       init = model,
-      printInterval = options.AROW_PRINT_INTERVAL,
-      verbose = options.VERBOSE,
-      random = random,
-      shenanigan = options.SHENANIGAN)
+      random = random)
   }
 
-  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rounds: Int, smoothing: Double = 1.0, shuffle: Boolean = true,
-    averaging: Boolean = false, init: AROWClassifier[T], printInterval: Int = 100000, verbose: Boolean = false, random: Random, shenanigan: Double = 0.0): AROWClassifier[T] = {
+  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
     // Initialize weight and variance vectors
     val weightVectors = init.weights 
     val varianceVectors = init.variances 
     
     // Begin training loop
-    println("Beginning %d rounds of training with %d instances and smoothing parameter %.2f.".format(rounds, data.size, smoothing))
+    val rounds = options.TRAIN_ITERATIONS
+    val verbose = options.VERBOSE
+    val averaging = options.AVERAGING
+    val shuffle = options.SHUFFLE
+    val printInterval = options.AROW_PRINT_INTERVAL
+    println("Beginning %d rounds of training with %d instances and smoothing parameter %.2f.".format(rounds, data.size, options.SMOOTHING))
     val timer = new dagger.util.Timer
     timer.start
     var classifier = new AROWClassifier[T](weightVectors, varianceVectors)
     val errors = new Array[Double](rounds)
     var averagedClassifier = classifier
 
-    for (r <- 1 to (if (averaging) 1 else rounds)) {
+    for (r <- 1 to (if (options.AVERAGING) 1 else rounds)) {
       if (verbose) println("Starting round " + r)
-      val instances = if (shuffle) random.shuffle(data) else data
+      val instances = (if (options.SHUFFLE) random.shuffle(data) else data) filter (in => in.getErrorCount < options.INSTANCE_ERROR_MAX)
       for ((instance, i) <- instances.view.zipWithIndex) {
         if (verbose) println("Instance " + i)
         for (r2 <- 1 to (if (averaging) rounds else 1)) {
           val actualRound = math.max(r, r2)
-          val (e, newClassifier) = innerLoop(i, actualRound, instance, smoothing, classifier, printInterval, verbose, random, shenanigan)
+          val (e, newClassifier) = innerLoop(i, actualRound, instance, options, classifier, random)
           classifier = newClassifier
           errors(actualRound - 1) += e
         }
@@ -154,11 +152,10 @@ object AROW {
     new AROWClassifier[T](weightVectors, varianceVectors)
   }
 
-  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], smoothing: Double, classifier: AROWClassifier[T],
-    printInterval: Int, verbose: Boolean, random: Random, shenanigan: Double): (Double, AROWClassifier[T]) = {
+  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], random: Random): (Double, AROWClassifier[T]) = {
 
     var errors = 0.0
-    if (printInterval > 0 && i % printInterval == 0) print("\rRound %d...instance %d...".format(r, i))
+    if (options.AROW_PRINT_INTERVAL > 0 && i % options.AROW_PRINT_INTERVAL == 0) print("\rRound %d...instance %d...".format(r, i))
 
     //println(instance)
     // maxLabel refers to labels - NOT weightLabels
@@ -171,6 +168,7 @@ object AROW {
     //       if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
     if (icost > 0.0) {
       errors += 1
+      instance.errorIncrement
 
       // correctLabels is an array of all those with cost of 0.0
       // so this line produces tuple of correct label with the lowest score from the classifier (i.e. the least good correct prediction)
@@ -214,15 +212,15 @@ object AROW {
       // a single AROW iteration and a single Dagger iteration.
       
 
-      val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted) + shenanigan.toFloat
-      val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect) + shenanigan.toFloat
+      val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
+      val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
       val confidence = preDot + minDot
 
-      val beta = 1.0f / (confidence + smoothing.toFloat)
+      val beta = 1.0f / (confidence + options.SMOOTHING.toFloat)
       val loss = (maxScore - minCorrectScore + Math.sqrt(icost)).toFloat
       val alpha = loss * beta
 
-      if (verbose) {
+      if (options.VERBOSE) {
         println("confidence = " + confidence)
         println("max label = " + maxLabel)
         println("max score = " + maxScore)
@@ -307,7 +305,9 @@ object AROW {
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad
     val best = (-3 to 3).map(math.pow(10, _)).map { s =>
-      val classifier = trainFromClassifier(rtrain, rounds = 10, smoothing = s, printInterval = 0, init = init, random = random)
+      val opt = new AROWOptions(Array[String]("--arow.smoothing", s.toString))
+      opt.TRAIN_ITERATIONS = 10
+      val classifier = trainFromClassifier(rtrain, opt, init = init, random = random)
       val cost = rdev.map(d => d.costOf(classifier.predict(d).maxLabels.head)).foldLeft(0.0)(_ + _)
       println("Cost for smoothing parameter = %.4f is %.2f\n".format(s, cost))
       (s, cost)
