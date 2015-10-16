@@ -30,7 +30,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     score: Iterable[(D, D)] => List[(String, Double)],
     actionToString: (A => String) = null,
     stringToAction: (String => A) = null,
-    utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null): MultiClassClassifier[A] = {
+    utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
@@ -92,7 +92,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
     featureFactory: FeatureFunctionFactory[D, S, A], trans: TransitionSystem[D, A, S], lossFactory: LossFunctionFactory[D, A, S],
-    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, Integer, D) => Unit): Array[Instance[A]] = {
+    prob: Double = 1.0, iteration: Int, utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit): Array[Instance[A]] = {
     val timer = new dagger.util.Timer
     timer.start()
 
@@ -126,7 +126,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
         val totalLoss = predEx match {
           case None => 1.0
-          case Some(output) => if (utilityFunction != null) utilityFunction(options, "instanceCollection_" + iteration.toString, dcount + 1, output); loss(output, d, predActions, expertActions)
+          case Some(output) =>
+            if (utilityFunction != null) utilityFunction(options, "instanceCollection_" + iteration.toString, dcount + 1, output, d)
+            loss(output, d, predActions, expertActions)
         }
         this.synchronized {
           lossOnTestSet = totalLoss :: lossOnTestSet
@@ -329,7 +331,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
-    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null) = {
+    lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
@@ -347,7 +349,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
   def helper(data: Iterable[D], postfix: String, iter: Integer, policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
     features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
-    utilityFunction: (DAGGEROptions, String, Integer, D) => Unit = null): (Double, List[(String, Double)]) = {
+    utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null): (Double, List[(String, Double)]) = {
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {
@@ -355,7 +357,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
-            if (utilityFunction != null) utilityFunction(options, postfix + "_" + iter, (index + 1), structure)
+            if (utilityFunction != null) utilityFunction(options, postfix + "_" + iter, (index + 1), structure, d)
             if (options.DEBUG) {
               debug.write("Target = " + d + "\n")
               debug.write("Prediction = " + structure + "\n")
