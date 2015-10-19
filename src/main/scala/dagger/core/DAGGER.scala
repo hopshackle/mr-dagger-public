@@ -353,7 +353,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
     val decoded = data.map { d => decode(d, policy, trans, features) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {
-      case ((d, decodePair), index) => //case (d, (prediction, actions)) =>
+      case ((d, decodePair), index) =>
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
