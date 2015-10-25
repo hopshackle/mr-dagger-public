@@ -33,7 +33,7 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Float]
     }
   }
 
-  def writeToFile(filename: String) = {
+  def writeToFile(filename: String, actionToString: T => String) = {
     val out = new FileWriter(filename)
     for (label <- weights.keys; (f, w) <- weights(label)) {
       out.write(label + "\t" + f + "\t" + w + "\n")

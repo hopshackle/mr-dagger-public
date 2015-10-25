@@ -30,7 +30,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     score: Iterable[(D, D)] => List[(String, Double)],
     actionToString: (A => String) = null,
     stringToAction: (String => A) = null,
-    utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null): MultiClassClassifier[A] = {
+    utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null,
+    startingClassifier: MultiClassClassifier[A] = null): MultiClassClassifier[A] = {
     // Construct new classifier and uniform classifier policy
     //    val dataSize = data.size
     //    val cache = new mutable.HashMap[S, Array[Double]]
@@ -38,7 +39,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     //  def features = (d: D, s: S, a: A) => Map[Int, Double]()
     // Begin DAGGER training
     var instances = new ArrayBuffer[Instance[A]]
-    var classifier = null.asInstanceOf[MultiClassClassifier[A]]
+    var classifier = startingClassifier
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
     val initialOracleLoss = options.ORACLE_LOSS
     for (i <- 1 to options.DAGGER_ITERATIONS) {

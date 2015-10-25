@@ -19,5 +19,5 @@ abstract class MultiClassClassifier[T] {
 
   def weightOf(a: T, p: Int): Float
 
-  def writeToFile(filename: String): Unit
+  def writeToFile(filename: String, actionToString: T => String): Unit
 }

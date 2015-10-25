@@ -30,12 +30,12 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
 
   def weightOf(a: T, p: Int): Float = weights(a).getOrElse(p, 0.0f)
 
-  def writeToFile(filename: String) = {
+  def writeToFile(filename: String, actionToString: T => String) = {
     val file = new File(filename)
     if (!file.getParentFile.exists()) file.getParentFile.mkdirs()
     val out = new FileWriter(filename)
     for (label <- weights.keys; (f, w) <- weights(label)) {
-      out.write(label + "\t" + f + "\t" + w + "\n")
+      out.write(actionToString(label) + "\t" + f + "\t" + w + "\n")
     }
     out.close()
   }
