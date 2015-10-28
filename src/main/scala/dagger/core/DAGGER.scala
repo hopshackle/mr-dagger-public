@@ -149,13 +149,19 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             // Find all actions permissible for current state
             val allPermissibleActions = trans.permissibleActions(state)
             val nextExpertAction = expert.chooseTransition(d, state)
-            val nextPolicyActions = if (policy.classifier != null)
+            val nextPolicyActionsAndScores = if (policy.classifier != null)
               predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features, options.ROLLOUT_THRESHOLD)
             else {
               // pick a non-expert action at random
               val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
-              (if (excludingExpertChoice.size > 0) Array(excludingExpertChoice(Random.nextInt(excludingExpertChoice.size))) else Array(nextExpertAction)).toSeq
+              val allChoices = (if (excludingExpertChoice.size > 0) Array(excludingExpertChoice(Random.nextInt(excludingExpertChoice.size))) else Array(nextExpertAction)).toSeq
+              allChoices map { x => (x, 0.0f)}
             }
+            if (options.DEBUG) {
+              debug.write("\n" + (nextPolicyActionsAndScores sortWith{case ((a1: A,s1: Float),(a2: A,s2: Float)) => s1 > s2} map {case (action, score) => f"$action $score%.3f\t"}).mkString(" ") + "\n")
+            }
+            val nextPolicyActions = nextPolicyActionsAndScores map {x => x._1}
+            val policyActionScores = nextPolicyActionsAndScores.toMap
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
               case true if (nextPolicyActions contains nextExpertAction) => nextPolicyActions.toArray
               case true => (nextPolicyActions ++ Seq(nextExpertAction)).toArray
@@ -170,12 +176,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
                 if (options.ORACLE_LOSS) return if (l == nextExpertAction) 0.0 else 1.0
                 (ex, if (expert.length > 0) expert(0) else false) match {
-                  case (None, _) =>
+                  case (None, _) => 
                     if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
                     loss.max(d)
                   case (Some(structure), usedExpert) =>
                     val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
-                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                    val pScore = policyActionScores.getOrElse(lastAction, -1.0f)
+                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f; Policy score $pScore%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
                     ll
                 }
               }
@@ -208,11 +215,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
             val min = costs.minBy(_ * 1.0)
             val normedCosts = costs.map(x => (x - min))
-            if (options.DEBUG) debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
-            if (options.DEBUG) debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
-            if (options.DEBUG) debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
-            if (options.DEBUG) debug.flush()
             if (options.DEBUG) {
+              debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
+              debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
+              debug.write("Normed Costs = " + (normedCosts map (i => f"$i%.3f")).mkString(", ") + "\n")
+
               val minAction = permissibleActions(normedCosts.indexOf(0.0))
               debug.write("Expert action: " + nextExpertAction + ", versus min cost action: " + minAction + "\n")
               if (!(permissibleActions contains nextExpertAction)) debug.write("Expert Action is not in permissible set.")
@@ -284,7 +291,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       val policy = if (random.nextDouble() <= prob) { expertUsed += true; expertPolicy } else { expertUsed += false; classifierPolicy }
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
-        case y: ProbabilisticClassifierPolicy[D, A, S] => predictUsingPolicy(ex, state, y, permissibleActions, featureFunction, 0.0).head
+        case y: ProbabilisticClassifierPolicy[D, A, S] => predictUsingPolicy(ex, state, y, permissibleActions, featureFunction, 0.0).head._1
       }
 
       actions += a
@@ -298,7 +305,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A],
-    featureFunction: (D, S, A) => THashMap[Int, Float], threshold: Double): Seq[A] = {
+    featureFunction: (D, S, A) => THashMap[Int, Float], threshold: Double): Seq[(A, Float)] = {
     val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
     val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
       permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))

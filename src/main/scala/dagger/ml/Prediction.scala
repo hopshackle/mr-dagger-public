@@ -19,7 +19,8 @@ case class Prediction[T](label2score: Map[T, Float], entropy: Double = 0.0) {
 
   lazy val maxLabels: Seq[T] = label2score.toSeq.filter(_._2 == maxScore).map(_._1)
   
-  def maxLabelsWithinThreshold(threshold: Double): Seq[T] = label2score.toSeq.filter(_._2 >= maxScore - threshold).map(_._1)
+  def maxLabelsWithinThreshold(threshold: Double): Seq[(T, Float)] = label2score.toSeq.filter(_._2 >= maxScore - threshold).map {
+    x => ((x._1, (x._2 - maxScore).toFloat)) }
 
   lazy val maxLabel = maxLabels.head
 
