@@ -28,7 +28,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
     Prediction[T](label2score = scores.toMap)
   }
 
-  def weightOf(a: T, p: Int): Float = weights(a).getOrElse(p, 0.0f)
+  def weightOf(a: T, p: Int): Float = weights.getOrElse(a, HashMap[Int, Float]()).getOrElse(p, 0.0f)
 
   def writeToFile(filename: String, actionToString: T => String) = {
     val file = new File(filename)
