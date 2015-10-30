@@ -157,7 +157,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               val allChoices = (if (excludingExpertChoice.size > 0) Array(excludingExpertChoice(Random.nextInt(excludingExpertChoice.size))) else Array(nextExpertAction)).toSeq
               allChoices map { x => (x, 0.0f)}
             }
-            if (options.DEBUG) {
+            if (options.DEBUG && options.ROLLOUT_THRESHOLD > 0.0) {
               debug.write("\n" + (nextPolicyActionsAndScores sortWith{case ((a1: A,s1: Float),(a2: A,s2: Float)) => s1 > s2} map {case (action, score) => f"$action $score%.3f\t"}).mkString(" ") + "\n")
             }
             val nextPolicyActions = nextPolicyActionsAndScores map {x => x._1}
