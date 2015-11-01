@@ -67,6 +67,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   
   lazy val ROLLOUT_THRESHOLD = getDouble("--threshold", 0.0)
   
+  lazy val USE_EXPERT_ON_ROLLOUT_AFTER = getInt("--expertAfter", 300)
+  
   lazy val PREVIOUS_ITERATIONS_TO_USE = getInt("--previousTrainingIter", 100)
 
   override def toString = {

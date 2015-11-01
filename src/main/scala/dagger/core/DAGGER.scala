@@ -155,12 +155,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               // pick a non-expert action at random
               val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
               val allChoices = (if (excludingExpertChoice.size > 0) Array(excludingExpertChoice(Random.nextInt(excludingExpertChoice.size))) else Array(nextExpertAction)).toSeq
-              allChoices map { x => (x, 0.0f)}
+              allChoices map { x => (x, 0.0f) }
             }
             if (options.DEBUG && options.ROLLOUT_THRESHOLD > 0.0) {
-              debug.write("\n" + (nextPolicyActionsAndScores sortWith{case ((a1: A,s1: Float),(a2: A,s2: Float)) => s1 > s2} map {case (action, score) => f"$action $score%.3f\t"}).mkString(" ") + "\n")
+              debug.write("\n" + (nextPolicyActionsAndScores sortWith { case ((a1: A, s1: Float), (a2: A, s2: Float)) => s1 > s2 } map { case (action, score) => f"$action $score%.3f\t" }).mkString(" ") + "\n")
             }
-            val nextPolicyActions = nextPolicyActionsAndScores map {x => x._1}
+            val nextPolicyActions = nextPolicyActionsAndScores map { x => x._1 }
             val policyActionScores = nextPolicyActionsAndScores.toMap
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
               case true if (nextPolicyActions contains nextExpertAction) => nextPolicyActions.toArray
@@ -176,7 +176,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               def calculateAndLogLoss(ex: Option[D], actions: Array[A], expert: Array[Boolean], expertActionsFromHere: Array[A], lastAction: A, nextExpertAction: A): Double = {
                 if (options.ORACLE_LOSS) return if (l == nextExpertAction) 0.0 else 1.0
                 (ex, if (expert.length > 0) expert(0) else false) match {
-                  case (None, _) => 
+                  case (None, _) =>
                     if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
                     loss.max(d)
                   case (Some(structure), usedExpert) =>
@@ -288,7 +288,18 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (permissibleActions.isEmpty) {
         return (None, actions.toArray, expertUsed.toArray)
       }
-      val policy = if (random.nextDouble() <= prob) { expertUsed += true; expertPolicy } else { expertUsed += false; classifierPolicy }
+      val policy = (rollIn, actionsTaken >= options.USE_EXPERT_ON_ROLLOUT_AFTER, (classifierPolicy.classifier == null || random.nextDouble <= prob)) match {
+        case (true, _, true) =>
+          expertUsed += true; expertPolicy
+        case (true, _, false) =>
+          expertUsed += false; classifierPolicy
+        case (false, false, false) =>
+          expertUsed += false; classifierPolicy
+        case (false, false, true) =>
+          expertUsed += true; expertPolicy
+        case (false, true, _) =>
+          expertUsed += true; expertPolicy
+      }
       val a = policy match {
         case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
         case y: ProbabilisticClassifierPolicy[D, A, S] => predictUsingPolicy(ex, state, y, permissibleActions, featureFunction, 0.0).head._1
@@ -328,7 +339,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float]): (Option[D], Array[A]) = {
-    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, probability = 0.0) match { case (a, b, c) => (a, b) }
+    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, probability = 0.0, true) match { case (a, b, c) => (a, b) }
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {

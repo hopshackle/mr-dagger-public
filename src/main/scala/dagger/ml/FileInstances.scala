@@ -18,13 +18,13 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
   var nextFileIndex = 1
 
   def hasNext: Boolean = {
-    fileCursor < currentFile.length || nextFileIndex < files.size
+    currentFile.hasNext
   }
 
   def next: Instance[T] = {
-    val output = currentFile(fileCursor)
+    val output = currentFile.next
     fileCursor += 1
-    if (fileCursor >= currentFile.length && nextFileIndex < files.size) {
+    if (!currentFile.hasNext && nextFileIndex < files.size) {
       currentFile = nextFileContents(files(nextFileIndex))
       nextFileIndex += 1
       fileCursor = 0
@@ -32,7 +32,7 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
     output
   }
 
-  def nextFileContents(fileName: String): Array[Instance[T]] = {
+  def nextFileContents(fileName: String): Iterator[Instance[T]] = {
     val lines = io.Source.fromFile(fileName).getLines
     var currentString = ""
     val instances = new ArrayBuffer[Instance[T]]
@@ -44,7 +44,7 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
         input = ""
       }
     }
-    instances.toArray
+    instances.toIterator
   }
 
 }
