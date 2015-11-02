@@ -44,17 +44,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val initialOracleLoss = options.ORACLE_LOSS
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       if (i == 1 && options.INITIAL_ORACLE_LOSS) options.ORACLE_LOSS = true else options.ORACLE_LOSS = initialOracleLoss
+      if (i > 1) options.USE_EXPERT_ON_ROLLOUT_AFTER += options.EXPERT_HORIZON_INCREMENT
       val prob = if (i == 1) 1.0 else options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       val newInstances = collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
       if (actionToString != null) {
-        // write to file
-        val fileName = options.DAGGER_OUTPUT_PATH + "Instances_" + i + ".txt"
-        val file = new FileWriter(fileName)
-        for (i <- newInstances) {
-          file.write(i.fileFormat(actionToString))
-        }
-        file.close
+        writeInstancesToFile(newInstances, i, actionToString)
       }
       if (stringToAction == null) {
         val starting = instances.size
@@ -80,7 +75,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val startingInstances = math.max(1, i - options.PREVIOUS_ITERATIONS_TO_USE)
         println("Starting from " + startingInstances)
         val fileNames = ((startingInstances to i) map (iter => options.DAGGER_OUTPUT_PATH + "Instances_" + iter + ".txt")).toList
-        classifier = trainFromInstances(new FileInstances(fileNames, stringToAction), trans.actions, old = classifier)
+        classifier = trainFromInstances(new FileInstances(fileNames, stringToAction, actionToString, options.INSTANCE_ERROR_MAX), trans.actions, old = classifier)
       }
 
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
@@ -89,6 +84,15 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
     }
     classifier
+  }
+
+  def writeInstancesToFile(instances: Array[Instance[A]], iteration: Int, actionToString: (A => String)) {
+    val fileName = options.DAGGER_OUTPUT_PATH + "Instances_" + iteration + ".txt"
+    val file = new FileWriter(fileName)
+    for (i <- instances) {
+      file.write(i.fileFormat(actionToString))
+    }
+    file.close
   }
 
   def collectInstances(data: Iterable[D], expert: HeuristicPolicy[D, A, S], policy: ProbabilisticClassifierPolicy[D, A, S],
@@ -183,6 +187,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                     val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
                     val pScore = policyActionScores.getOrElse(lastAction, -1.0f)
                     if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f; Policy score $pScore%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                    if (false) actions foreach { a => debug.write(a.toString + "\t") }
+                    if (false) debug.write("\n")
                     ll
                 }
               }

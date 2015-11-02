@@ -11,7 +11,7 @@ import gnu.trove.map.hash.THashMap
  * Time: 2:43 PM
  */
 // A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag
-case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], costs: Array[Float] = null) {
+case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], costs: Array[Float] = null, err: Int = 0) {
 
   lazy val featureVector = feats map (i => Instance.troveMapToScala(i))
 
@@ -25,15 +25,16 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
 
   lazy val correctCost = 0.0
   
-  var errors = 0
+  var errors = err
 
   def fileFormat(actionToString: (T => String)): String = {
     val actionSize = feats.size + "\n"
+    val errorCount = getErrorCount + "\n"
     val featureOutput = ((0 until feats.size) map (i => featureVector(i) map (f => f"${f._1}:${f._2}%.2f") mkString ("\t")) mkString ("\n")) + "\n"
     val labelOutput = (labels map actionToString mkString ("\t")) + "\n"
     val weightLabelOutput = (weightLabels map actionToString mkString ("\t")) + "\n"
     val costOutput = (costs map { c => f"${c}%.4f" } mkString ("\t")) + "\n"
-    actionSize + featureOutput + labelOutput + weightLabelOutput + costOutput + "END\n"
+    actionSize + errorCount + featureOutput + labelOutput + weightLabelOutput + costOutput + "END\n"
   }
   
   def errorIncrement: Unit = {
@@ -65,12 +66,13 @@ object Instance {
     // input is in the same format as that constructed by fileFormat function
     val inputSplit = input.split("\n")
     val actionSize = inputSplit(0).toInt
-    val features = ((1 to actionSize) map (i =>
+    val errors = inputSplit(1).toInt
+    val features = ((2 to actionSize+1) map (i =>
       scalaMapToTrove((inputSplit(i).split("\t") map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) }).toMap))).toList
-    val labels = inputSplit(actionSize + 1).split("\t") map stringToAction
-    val weightLabels = inputSplit(actionSize + 2).split("\t") map stringToAction
-    val costs = inputSplit(actionSize + 3).split("\t") map { i => i.toFloat }
-    new Instance[T](features, labels, weightLabels, costs)
+    val labels = inputSplit(actionSize + 2).split("\t") map stringToAction
+    val weightLabels = inputSplit(actionSize + 3).split("\t") map stringToAction
+    val costs = inputSplit(actionSize + 4).split("\t") map { i => i.toFloat }
+    new Instance[T](features, labels, weightLabels, costs, errors)
   }
 
   def troveMapToScala(trove: gnu.trove.map.hash.THashMap[Int, Float]): Map[Int, Float] = {
