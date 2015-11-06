@@ -12,9 +12,17 @@ class FileInstances[T: ClassTag](files: List[String], stringToAction: (String =>
   }
 }
 
+import java.io.{ File, FileInputStream, FileOutputStream }
+
+object FileInstances {
+  def copyFile(source: String, destination: String) {
+    val src = new File(source)
+    val dest = new File(destination)
+    new FileOutputStream(dest).getChannel.transferFrom(new FileInputStream(src).getChannel, 0, Long.MaxValue)
+  }
+}
 class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String => T), actionToString: (T => String), errorLimit: Int) extends Iterator[Instance[T]] {
 
-  var fileCursor = 0
   var currentFile = nextFileContents(files(0))
   var nextFileIndex = 1
   var lastOutput: Instance[T] = null
@@ -35,31 +43,33 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
   def next: Instance[T] = {
     val output = currentFile.next
     writeBackToFile(lastOutput)
-    fileCursor += 1
     if (!currentFile.hasNext && nextFileIndex < files.size) {
       currentFile = nextFileContents(files(nextFileIndex))
       nextFileIndex += 1
-      fileCursor = 0
     }
     lastOutput = output
     output
   }
 
   def nextFileContents(fileName: String): Iterator[Instance[T]] = {
-    val lines = io.Source.fromFile(fileName).getLines
-    var currentString = ""
-    val instances = new ArrayBuffer[Instance[T]]
-    var input = ""
-    for (l <- lines) {
-      input += l + "\n"
-      if (l == "END") {
-        instances += Instance.construct(input, stringToAction)
-        input = ""
+    FileInstances.copyFile(fileName, fileName + "_tmp")
+    val lines = io.Source.fromFile(fileName + "_tmp").getLines
+
+    new Iterator[Instance[T]] {
+      def hasNext: Boolean = lines.hasNext
+
+      def next: Instance[T] = {
+        val input = new StringBuffer
+        var endOfInstance = false
+        while (!endOfInstance) {
+          val l = lines.next
+          input.append(l + "\n")
+          if (l == "END") endOfInstance = true
+        }
+        Instance.construct(input.toString, stringToAction)
       }
     }
-    instances.toIterator
   }
-
   def writeBackToFile(i: Instance[T]) {
     if (currentFileBeingWrittenTo != null && i != null && i.getErrorCount < errorLimit)
       currentFileBeingWrittenTo.write(i.fileFormat(actionToString))
