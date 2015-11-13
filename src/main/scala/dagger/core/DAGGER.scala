@@ -110,7 +110,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     // Keep statistics on # of failed unrolls and the accuracy of predicted structures
     //    var numFailedUnrolls = 0
     //    var numCorrectUnrolls = 0
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_" + f"$prob%.3f" + ".txt")
+    val debug = if (options.DEBUG) new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_" + f"$prob%.3f" + ".txt") else null
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
     val dataWithIndex = data.zipWithIndex
