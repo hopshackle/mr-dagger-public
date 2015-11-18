@@ -173,6 +173,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               case false => allPermissibleActions :+ nextExpertAction
             }
 
+            if (options.DEBUG) {
+              if (false) debug.write("State:" + state + "\n")
+              debug.write("\n" + (permissibleActions.mkString("; ") + "\n"))
+              debug.flush
+            }
             // Compute a cost for each permissible action
             // if just one action, then we can save some time in not rolling out
             val costs = if (permissibleActions.size == 1) Array(0.0) else permissibleActions.map { l =>
@@ -255,7 +260,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         allInstances
     }.toArray
     if (options.DEBUG) debug.write(f"Mean Loss on test set:\t ${(lossOnTestSet reduce (_ + _)) / lossOnTestSet.size}%.3f")
-    debug.close
+    if (options.DEBUG) debug.close
     allData filter (_.costs.size > 1)
   }
 
@@ -313,7 +318,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
 
       actions += a
       actionsTaken += 1
-      if (actionsTaken == options.MAX_ACTIONS) {
+      if (actionsTaken == options.MAX_ACTIONS && options.DEBUG) {
         println(s"Unroll terminated at $actionsTaken actions")
       }
       state = a(state)
