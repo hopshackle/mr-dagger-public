@@ -126,8 +126,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         // Use policies to fully construct (unroll) instance from start state
         val (_, expertActions, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0) else (0, Array[A](), 0)
         val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob, true)
-        if (options.DEBUG) debug.write("Initial State:" + trans.init(d) + "\n")
-        if (options.DEBUG) { debug.write("Actions Taken:\n"); (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n")) }
+        if (options.DEBUG) {
+          debug.write("Initial State:" + trans.init(d) + "\n")
+          debug.write("Actions Taken:\n")
+          (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
+     //     debug.write("Final State: " + predEx + "\n")
+        }
 
         val totalLoss = predEx match {
           case None => 1.0
