@@ -130,7 +130,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           debug.write("Initial State:" + trans.init(d) + "\n")
           debug.write("Actions Taken:\n")
           (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
-     //     debug.write("Final State: " + predEx + "\n")
+          //     debug.write("Final State: " + predEx + "\n")
         }
 
         val totalLoss = predEx match {
@@ -196,8 +196,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                     val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
                     val pScore = policyActionScores.getOrElse(lastAction, -1.0f)
                     if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f; Policy score $pScore%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
-                    if (false) actions foreach { a => debug.write(a.toString + "\t") }
-                    if (false) debug.write("\n")
+                    if (false) {
+                      actions foreach { a => debug.write(a.toString + "\t") }
+                      debug.write("\n")
+                    }
                     ll
                 }
               }
