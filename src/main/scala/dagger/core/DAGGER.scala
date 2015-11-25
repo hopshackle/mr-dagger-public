@@ -193,14 +193,15 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                     if (options.DEBUG) debug.write("Failed unroll, loss = " + loss.max(d) + "\n")
                     loss.max(d)
                   case (Some(structure), usedExpert) =>
-                    val ll = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
+                    val basicLoss = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
                     val pScore = policyActionScores.getOrElse(lastAction, -1.0f)
-                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $ll%.3f; Policy score $pScore%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                    val fullLoss = if (options.COACHING_LAMBDA > 0.0 && policy.classifier != null) basicLoss + options.COACHING_LAMBDA * pScore else basicLoss
+                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $basicLoss%.3f; Policy score $pScore%.3f; Full Loss $fullLoss%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
                     if (false) {
                       actions foreach { a => debug.write(a.toString + "\t") }
                       debug.write("\n")
                     }
-                    ll
+                    fullLoss
                 }
               }
 
@@ -230,8 +231,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
             // Reduce all costs until the min cost is 0
 
+            val coachedCosts = costs 
             val min = costs.minBy(_ * 1.0)
-            val normedCosts = costs.map(x => (x - min))
+            val costsWithoutOffset = costs.map(x => (x - min))
+            val normedCosts = if (options.BINARY_LOSS) costsWithoutOffset map (x => if (x == 0.0) 0.0 else 1.0) else costsWithoutOffset
             if (options.DEBUG) {
               debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
               debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")

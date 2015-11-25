@@ -72,6 +72,10 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val EXPERT_HORIZON_INCREMENT = getInt("--expertHorizonInc", 0)
   
   lazy val PREVIOUS_ITERATIONS_TO_USE = getInt("--previousTrainingIter", 100)
+  
+  lazy val BINARY_LOSS = getBoolean("--binaryLoss", false)
+  
+  lazy val COACHING_LAMBDA = getDouble("--coachingLambda", 0.0)
 
   override def toString = {
     "DAGGER Options:\n" +
