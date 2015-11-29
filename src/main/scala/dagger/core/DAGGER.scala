@@ -178,7 +178,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
 
             if (options.DEBUG) {
-              if (false) debug.write("State:" + state + "\n")
+              if (true) debug.write("State:" + state + "\n")
               debug.write("\n" + (permissibleActions.mkString("; ") + "\n"))
               debug.flush
             }
@@ -196,10 +196,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                     val basicLoss = loss(gold = d, test = structure, actions, expertActionsFromHere, lastAction, nextExpertAction)
                     val pScore = policyActionScores.getOrElse(lastAction, -1.0f)
                     val fullLoss = if (options.COACHING_LAMBDA > 0.0 && policy.classifier != null) basicLoss + options.COACHING_LAMBDA * pScore else basicLoss
-                    if (options.DEBUG) debug.write(f"Loss on action $lastAction = $basicLoss%.3f; Policy score $pScore%.3f; Full Loss $fullLoss%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
-                    if (false) {
-                      actions foreach { a => debug.write(a.toString + "\t") }
-                      debug.write("\n")
+                    if (options.DEBUG) {
+                      debug.write(f"Loss on action $lastAction = $basicLoss%.3f; Policy score $pScore%.3f; Full Loss $fullLoss%.3f (${if (usedExpert) "Expert" else "Learned Policy"})\n")
+                      if (true) {
+                        actions foreach { a => debug.write(a.toString + "\t") }
+                        debug.write("\n")
+                      }
                     }
                     fullLoss
                 }
@@ -231,7 +233,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
             // Reduce all costs until the min cost is 0
 
-            val coachedCosts = costs 
+            val coachedCosts = costs
             val min = costs.minBy(_ * 1.0)
             val costsWithoutOffset = costs.map(x => (x - min))
             val normedCosts = if (options.BINARY_LOSS) costsWithoutOffset map (x => if (x == 0.0) 0.0 else 1.0) else costsWithoutOffset
