@@ -13,7 +13,8 @@ import scala.util.Random
  * Time: 12:13 PM
  */
 case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]](),
-  variances: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]]())
+  variances: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]](),
+  averagingCounter: Int = 1, cachedWeights: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]]())
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
@@ -22,7 +23,10 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
 
     val scores = (instance.labels, instance.weightLabels, instance.featureVector).zipped map {
       case (label, weightLabel, feats) =>
-        if (!weights.contains(weightLabel)) weights(weightLabel) = new HashMap[Int, Float]
+        if (!weights.contains(weightLabel)) { 
+          weights(weightLabel) = new HashMap[Int, Float]
+          cachedWeights(weightLabel) = new HashMap[Int, Float]
+        }
         label -> dotMap(feats, weights(weightLabel))
     }
     Prediction[T](label2score = scores.toMap)
@@ -39,22 +43,31 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
     }
     out.close()
   }
+
+  override def applyAveraging: MultiClassClassifier[T] = {
+    val newWeights = weights map { case (action, weights) => (action -> (weights map { case (k, v) => (k, v - cachedWeights(action)(k) / averagingCounter.toFloat) })) }
+    println("Averaged using averagingCount of " + averagingCounter)
+    this.copy(weights = newWeights)
+  }
 }
 
 object AROWClassifier {
 
   def empty[T: ClassTag](weightLabels: Array[T]): AROWClassifier[T] = {
     val weights = new HashMap[T, HashMap[Int, Float]]
+    val cachedWeights = new HashMap[T, HashMap[Int, Float]]
     val variances = new HashMap[T, HashMap[Int, Float]]
     for (l <- weightLabels) {
       if (!weights.contains(l)) weights(l) = new HashMap[Int, Float]
       if (!variances.contains(l)) variances(l) = new HashMap[Int, Float]
+      if (!cachedWeights.contains(l)) cachedWeights(l) = new HashMap[Int, Float]
     }
-    AROWClassifier(weights, variances)
+    AROWClassifier(weights, variances, cachedWeights = cachedWeights)
   }
 
   def fromFile[T: ClassTag](filename: String, actionMap: (String => T)): AROWClassifier[T] = {
     val weights = new HashMap[T, HashMap[Int, Float]]
+    val cachedWeights = new HashMap[T, HashMap[Int, Float]]
     val variances = new HashMap[T, HashMap[Int, Float]]
     val lines = io.Source.fromFile(filename).getLines
     lines.foreach { line =>
@@ -63,9 +76,10 @@ object AROWClassifier {
       val f = cols(1).toInt
       val w = cols(2).toFloat
       if (!weights.contains(label)) weights(label) = new HashMap[Int, Float]
+      if (!cachedWeights.contains(label)) cachedWeights(label) = new HashMap[Int, Float]
       weights(label)(f) = w
     }
-    AROWClassifier(weights, variances)
+    AROWClassifier(weights, variances, cachedWeights = cachedWeights)
   }
 }
 
@@ -91,46 +105,28 @@ object AROW {
   }
 
   private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
-    // Initialize weight and variance vectors
-    val weightVectors = init.weights
-    val varianceVectors = init.variances
-
     // Begin training loop
     val rounds = options.TRAIN_ITERATIONS
     val verbose = options.VERBOSE
-    val averaging = options.AVERAGING
     val shuffle = options.SHUFFLE
     val printInterval = options.AROW_PRINT_INTERVAL
     println("Beginning %d rounds of training with smoothing parameter %.2f.".format(rounds, options.SMOOTHING))
     val timer = new dagger.util.Timer
     timer.start
-    var classifier = new AROWClassifier[T](weightVectors, varianceVectors)
+    var classifier = init
     val errors = new Array[Double](rounds)
-    var averagedClassifier = classifier
-
-    for (r <- 1 to (if (options.AVERAGING) 1 else rounds)) {
+    for (r <- 1 to rounds) {
       if (verbose) println("Starting round " + r)
       val instances = if (options.SHUFFLE) random.shuffle(data) else data
       for ((instance, i) <- instances.toIterator.zipWithIndex) {
         if (instance.getErrorCount < options.INSTANCE_ERROR_MAX) {
           if (verbose) println("Instance " + i)
-          for (r2 <- 1 to (if (averaging) rounds else 1)) {
-            val actualRound = math.max(r, r2)
-            val (e, newClassifier) = innerLoop(i, actualRound, instance, options, classifier, random)
-            classifier = newClassifier
-            errors(actualRound - 1) += e
-          }
-          if (averaging) {
-            averagedClassifier = if (i == 0) classifier else average(averagedClassifier, classifier, i)
-            classifier = averagedClassifier
-            if (verbose) println("Have averaged")
-          }
+          val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random)
+          classifier = newClassifier
+          if (misClassification) errors(r - 1) += 1
         }
       }
-      if (verbose && !averaging) println("Training error in round %d : %1.2f".format(r, (100 * errors(r - 1) / data.size)))
-      if (verbose && averaging) {
-        for (loop <- 1 to rounds) println("Training error in round %d : %1.2f".format(loop, (100 * errors(loop - 1) / data.size)))
-      }
+      if (verbose) println("Training error in round %d : %1.2f".format(r, (100 * errors(r - 1) / data.size)))
     }
 
     // Compute final training error
@@ -153,25 +149,25 @@ object AROW {
     println("Completed in %s.".format(timer.toString))
 
     // Return final classifier
-    new AROWClassifier[T](weightVectors, varianceVectors)
+    classifier
   }
 
-  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], random: Random): (Double, AROWClassifier[T]) = {
+  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], random: Random): (Boolean, AROWClassifier[T]) = {
 
-    var errors = 0.0
     if (options.AROW_PRINT_INTERVAL > 0 && i % options.AROW_PRINT_INTERVAL == 0) print("\rRound %d...instance %d...".format(r, i))
 
     //println(instance)
     // maxLabel refers to labels - NOT weightLabels
     val weightVectors = classifier.weights
+    val cachedWeightVectors = classifier.cachedWeights
     val varianceVectors = classifier.variances
     val prediction = classifier.predict(instance)
     val maxLabel = prediction.maxLabel
     val maxScore = prediction.maxScore
     val icost = instance.costOf(maxLabel)
     //       if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
+    val error = if (icost > 0.0) true else false
     if (icost > 0.0) {
-      errors += 1
       instance.errorIncrement
 
       // correctLabels is an array of all those with cost of 0.0
@@ -204,17 +200,6 @@ object AROW {
           zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
       }
 
-      // If we had a shenanigan feature with value 1.0, then this would be unique for each of maxLabel and minCorrectLabel.
-      // We do not need to update any value for its weight, as by definition it will never be used again.
-      // Its impact is purely on the confidence weighting, as we have an additional variance value of the default of 1.0 in each case
-      // Hence the impact of the shenanigan is simply to add a constant to each of preDot and minDot
-      // BUT - this is exactly the same as increasing smoothing!!!!)
-
-      // OK...but if we had a shenanigan feature, then this weight would be updated, and on the next iteration through this training
-      // instance this would increase the likelihood of selecting the correct answer - which would mean that the weights are less likely
-      // to be updated on future iterations (also a regularisation impact). If this is the case, then I would expect shenanigans to have no impact on 
-      // a single AROW iteration and a single Dagger iteration.
-
       val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
       val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
       val confidence = preDot + minDot
@@ -239,6 +224,10 @@ object AROW {
 
       add(weightVectors(maxWeightLabel), zVectorPredicted, -1.0f * alpha)
       add(weightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha)
+      if (options.AVERAGING) {
+        add(cachedWeightVectors(maxWeightLabel), zVectorPredicted, -1.0f * alpha * classifier.averagingCounter)
+        add(cachedWeightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha * classifier.averagingCounter)
+      }
 
       for (feat <- instance.featureVector(iMaxLabel).keys) {
         // AV: you can save yourself this if by initializing them in the beginning
@@ -251,21 +240,7 @@ object AROW {
         varianceVectors(minCorrectWeightLabel)(feat) = (varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorMinCorrect(feat), 2)).toFloat
       }
     }
-    (errors, new AROWClassifier[T](weightVectors, varianceVectors))
-  }
-
-  def average[T: ClassTag](baseline: AROWClassifier[T], newbie: AROWClassifier[T], previousCount: Int): AROWClassifier[T] = {
-    // Take each weight in baseline, and add previousCount / previousCount + 1
-    // Take each weight in newbie and add 1 / previousCount + 1
-    // No need to worry about variance at this stage
-    val baseFraction = previousCount / (previousCount + 1.0f)
-    val newFraction = 1.0f / (previousCount + 1.0f)
-    val baseWeights = baseline.weights map { case (label, hashmap) => (label -> (new HashMap[Int, Float] ++= (hashmap.keys map { k => (k -> hashmap(k) * baseFraction) }))) }
-    val newWeights = newbie.weights map { case (label, hashmap) => (label -> (new HashMap[Int, Float] ++= (hashmap.keys map { k => (k -> hashmap(k) * newFraction) }))) }
-    newWeights.keys foreach (k => if (!baseWeights.contains(k)) baseWeights(k) = new HashMap[Int, Float])
-    newWeights.keys foreach (k => add(baseWeights(k), newWeights(k)))
-
-    new AROWClassifier[T](baseWeights, baseline.variances)
+    (error, new AROWClassifier[T](weightVectors, varianceVectors, classifier.averagingCounter + 1, cachedWeightVectors))
   }
 
   def add(v1: HashMap[Int, Float], v2: HashMap[Int, Float], damp: Float = 1.0f) = {

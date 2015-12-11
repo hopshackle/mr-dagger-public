@@ -20,4 +20,6 @@ abstract class MultiClassClassifier[T] {
   def weightOf(a: T, p: Int): Float
 
   def writeToFile(filename: String, actionToString: T => String): Unit
+  
+  def applyAveraging: MultiClassClassifier[T] = this
 }

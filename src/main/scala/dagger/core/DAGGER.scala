@@ -32,11 +32,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     stringToAction: (String => A) = null,
     utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null,
     startingClassifier: MultiClassClassifier[A] = null): MultiClassClassifier[A] = {
-    // Construct new classifier and uniform classifier policy
-    //    val dataSize = data.size
-    //    val cache = new mutable.HashMap[S, Array[Double]]
 
-    //  def features = (d: D, s: S, a: A) => Map[Int, Double]()
     // Begin DAGGER training
     var instances = new ArrayBuffer[Instance[A]]
     var classifier = startingClassifier
@@ -83,6 +79,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
       if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
     }
+    if (options.AVERAGING) classifier = classifier.applyAveraging
+
     classifier
   }
 
