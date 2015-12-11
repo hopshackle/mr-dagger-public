@@ -57,7 +57,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           val totalIterations = options.TRAIN_ITERATIONS
           options.TRAIN_ITERATIONS = 1
           for (j <- 1 to totalIterations) {
-            classifier = trainFromInstances(instances, trans.actions, old = classifier)
+            classifier = trainFromInstances(instances, trans.actions, old = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier)
             if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
               featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
           }

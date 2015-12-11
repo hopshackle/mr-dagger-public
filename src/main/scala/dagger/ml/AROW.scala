@@ -265,7 +265,7 @@ object AROW {
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.featureVector map identity flatMap identity groupBy (_._1) mapValues (_.map(_._2))
+      keys = d.featureVector.flatten groupBy (_._1) mapValues (_.map(_._2))
       maxValueMap = keys map { case (k, v) => (k, (v map Math.abs).max) }
     } yield maxValueMap
 
