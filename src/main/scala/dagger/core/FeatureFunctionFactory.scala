@@ -8,4 +8,6 @@ abstract class FeatureFunctionFactory[D: ClassTag, S <: TransitionState: ClassTa
 
 abstract class FeatureFunction[D: ClassTag, S <: TransitionState: ClassTag, A <: TransitionAction[S]: ClassTag] {
   def features(data: D, state: S, action: A): gnu.trove.map.hash.THashMap[Int, Float]
+  
+  def featureName(key: Int): String
 }

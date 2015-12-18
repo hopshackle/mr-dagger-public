@@ -37,11 +37,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     var instances = new ArrayBuffer[Instance[A]]
     var classifier = startingClassifier
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
-    val initialOracleLoss = options.ORACLE_LOSS
     for (i <- 1 to options.DAGGER_ITERATIONS) {
-      if (i == 1 && options.INITIAL_ORACLE_LOSS) options.ORACLE_LOSS = true else options.ORACLE_LOSS = initialOracleLoss
       if (i > 1) options.USE_EXPERT_ON_ROLLOUT_AFTER += options.EXPERT_HORIZON_INCREMENT
-      val prob = if (i == 1) 1.0 else options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
+      val prob = options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
       val newInstances = collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
       if (actionToString != null) {
@@ -59,7 +57,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           for (j <- 1 to totalIterations) {
             classifier = trainFromInstances(instances, trans.actions, old = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier)
             if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
-              featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
+              featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
           }
           options.TRAIN_ITERATIONS = totalIterations
         } else {
@@ -77,7 +75,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction.features, lossFactory, score, utilityFunction)
+      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
     }
     if (options.AVERAGING) classifier = classifier.applyAveraging
 
@@ -99,15 +97,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     val timer = new dagger.util.Timer
     timer.start()
 
-    val Dagger = options.ALGORITHM == "Dagger" || options.ALGORITHM == "DILO" || options.ALGORITHM == "DILDO"
     val LOLSDet = options.ALGORITHM == "LOLSDet" || options.ALGORITHM == "DILDO"
-    val LOLS = options.ALGORITHM == "LOLS" || options.ALGORITHM == "DILO" || options.ALGORITHM == "LIDO"
-    // Compute the probability of choosing the oracle policy in this round
-    //      val prob = math.pow(1.0 - options.POLICY_DECAY, i-1)
-    //      println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-    // Keep statistics on # of failed unrolls and the accuracy of predicted structures
-    //    var numFailedUnrolls = 0
-    //    var numCorrectUnrolls = 0
     val debug = if (options.DEBUG) new FileWriter(options.DAGGER_OUTPUT_PATH + "CollectInstances_debug_" + iteration + "_" + f"$prob%.3f" + ".txt") else null
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
@@ -122,13 +112,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         val featFn = featureFactory.newFeatureFunction
 
         // Use policies to fully construct (unroll) instance from start state
-        val (_, expertActions, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, trans.init(d), trans, featFn.features, 1.0) else (0, Array[A](), 0)
-        val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn.features, prob, true)
+        val (_, expertActions, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, trans.init(d), trans, featFn, 1.0, debug = debug) else (0, Array[A](), 0)
+        val (predEx, predActions, expertUse) = unroll(d, expert, policy, trans.init(d), trans, featFn, prob, true, debug)
         if (options.DEBUG) {
-          debug.write("Initial State:" + trans.init(d) + "\n")
           debug.write("Actions Taken:\n")
           (predActions zip expertUse) foreach (x => debug.write(x._1 + " : " + x._2 + "\n"))
-          //     debug.write("Final State: " + predEx + "\n")
         }
 
         val totalLoss = predEx match {
@@ -141,13 +129,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           lossOnTestSet = totalLoss :: lossOnTestSet
         }
         if (options.DEBUG) debug.write(f"Total Loss:\t$totalLoss%.3f, using ${predActions.size}\n")
-        // Check that the oracle policy is correct
-        //        if (i == 1 && options.CHECK_ORACLE) assert(predEx.get == d, "Oracle failed to produce gold structure...Gold:\n%s\nPredicted:\n%s".format(d, predEx.get))
-        //        if (predEx.get == d) numCorrectUnrolls += 1
-        // Initialize state from data example
+
         var state = trans.init(d)
-        // For all actions used to predict the unrolled structure...
-        //for (a <- predActions)
+
         loss.setSamples(options.NUM_SAMPLES * (if (LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) 2 else 1))
         val allInstances = predActions.zipWithIndex map {
           case (a, actionNumber) =>
@@ -163,9 +147,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               val allChoices = (if (excludingExpertChoice.size > 0) Array(excludingExpertChoice(Random.nextInt(excludingExpertChoice.size))) else Array(nextExpertAction)).toSeq
               allChoices map { x => (x, 0.0f) }
             }
-            if (options.DEBUG && options.ROLLOUT_THRESHOLD > 0.0) {
-              debug.write("\n" + (nextPolicyActionsAndScores sortWith { case ((a1: A, s1: Float), (a2: A, s2: Float)) => s1 > s2 } map { case (action, score) => f"$action $score%.3f\t" }).mkString(" ") + "\n")
-            }
+
             val nextPolicyActions = nextPolicyActionsAndScores map { x => x._1 }
             val policyActionScores = nextPolicyActionsAndScores.toMap
             val permissibleActions = options.REDUCED_ACTION_SPACE match {
@@ -175,11 +157,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               case false => allPermissibleActions :+ nextExpertAction
             }
 
-            if (options.DEBUG) {
-              if (true) debug.write("State:" + state + "\n")
-              debug.write("\n" + (permissibleActions.mkString("; ") + "\n"))
-              debug.flush
-            }
             // Compute a cost for each permissible action
             // if just one action, then we can save some time in not rolling out
             val costs = if (permissibleActions.size == 1) Array(0.0) else permissibleActions.map { l =>
@@ -213,18 +190,18 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
                 //          loss(gold = d, test = trans.expertApprox(d, stateCopy), testActions = Array(), expertActions)
                 //        }
                 options.MAX_ACTIONS = MAX_ACTIONS - actionNumber
-                val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) else (0, Array[A](), 0)
+                val (_, expertActionsFromHere, _) = if (options.UNROLL_EXPERT_FOR_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn, 1.0) else (0, Array[A](), 0)
                 if (options.APPROXIMATE_LOSS) {
                   trans.approximateLoss(datum = d, state = state, action = l)
                 } else if (LOLSDet && policy.classifier != null && !options.ORACLE_LOSS) {
-                  val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 1.0) // uses expert
+                  val (sampledExEx, sampledActionsEx, _) = unroll(d, expert, policy, stateCopy, trans, featFn, 1.0) // uses expert
                   val expertLoss = calculateAndLogLoss(sampledExEx, sampledActionsEx, Array(true), expertActionsFromHere, l, nextExpertAction)
-                  val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn.features, 0.0) // uses learned policy
+                  val (sampledExLP, sampledActionsLP, _) = unroll(d, expert, policy, stateCopy, trans, featFn, 0.0) // uses learned policy
                   val policyLoss = calculateAndLogLoss(sampledExLP, sampledActionsLP, Array(false), expertActionsFromHere, l, nextExpertAction)
                   expertLoss * prob + policyLoss * (1.0 - prob)
                 } else {
                   // Unroll from current state until completion
-                  val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn.features, prob) else (Some(d), Array[A](), Array[Boolean]())
+                  val (sampledEx, sampledActions, expertInSample) = if (!options.ORACLE_LOSS) unroll(d, expert, policy, stateCopy, trans, featFn, prob) else (Some(d), Array[A](), Array[Boolean]())
                   calculateAndLogLoss(sampledEx, sampledActions, expertInSample, expertActionsFromHere, l, nextExpertAction)
                 }
               }.foldLeft(0.0)(_ + _) / options.NUM_SAMPLES // average the label loss for all samples
@@ -235,6 +212,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val min = costs.minBy(_ * 1.0)
             val costsWithoutOffset = costs.map(x => (x - min))
             val normedCosts = if (options.BINARY_LOSS) costsWithoutOffset map (x => if (x == 0.0) 0.0 else 1.0) else costsWithoutOffset
+
+            val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
+            val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
+            val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
+
             if (options.DEBUG) {
               debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
               debug.write("Original Costs = " + (costs map (i => f"$i%.3f")).mkString(", ") + "\n")
@@ -246,14 +228,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               debug.write("\n")
               debug.flush()
             }
-            // Construct new training instance with sampled losses
-            //TODO: We're keeping too many copies of features. We can dump those that are identical
-            val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
-            val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-            val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
-            //  println(f"${permissibleActions.mkString(",")}, maxCost ${instance.maxCost}%.2f, minCost ${instance.minCost}%.2f, correctLabels ${instance.correctLabels}")
+
             loss.clearCache
-            //        if (options.SERIALIZE) file.write(instance.toSerialString + "\n\n") else instances += instance
 
             // Progress to next state in the predicted path
             state = a(state)
@@ -288,8 +264,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     expertPolicy: HeuristicPolicy[D, A, S],
     classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
     start: S, trans: TransitionSystem[D, A, S],
-    featureFunction: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
-    probability: Double = 1.0, rollIn: Boolean = false): (Option[D], Array[A], Array[Boolean]) = {
+    featureFunction: FeatureFunction[D, S, A],
+    probability: Double = 1.0, rollIn: Boolean = false, debug: FileWriter = null): (Option[D], Array[A], Array[Boolean]) = {
 
     // For Dagger we have no difference between Roll-In and Roll-Out. We always use expert with probability.
     // For LOLS we always Roll-In with the learned policy (if we have one, which we won't on the first iteration)
@@ -320,9 +296,38 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         case (false, true, _) =>
           expertUsed += true; expertPolicy
       }
+      val expertAction = if (expertPolicy != null) expertPolicy.predict(ex, state) else null.asInstanceOf[A]
+      val actionsAndScores = if (classifierPolicy.classifier != null)
+        predictUsingPolicy(ex, state, classifierPolicy, permissibleActions, featureFunction.features, options.ROLLOUT_THRESHOLD) sortWith {
+          case ((a1: A, s1: Float), (a2: A, s2: Float)) => s1 > s2
+        }
+      else Seq()
+
+      if (options.DEBUG && debug != null) {
+        debug.write("State:" + state + "\nExpertAction: " + expertAction + "\n")
+        debug.write("\n" + (actionsAndScores map { case (action, score) => f"$action $score%.3f\t" }).mkString(" ") + "\n")
+        if (options.ROLLOUT_THRESHOLD > 0.0) {
+          if (options.DETAIL_DEBUG) {
+            for (a <- actionsAndScores map { _._1 }) {
+              debug.write(a + "\n")
+              import scala.collection.JavaConversions._
+              val scalaMap: Map[Int, Float] = featureFunction.features(ex, state, a)
+              for ((k, v) <- scalaMap) {
+                val feature = featureFunction.featureName(k)
+                val padding = " " * (40 - feature.size)
+                val weight = classifierPolicy.classifier.weightOf(a, k)
+                debug.write(f"$feature $padding $v%.2f \t Weight: $weight%.3f\n")
+              }
+              debug.write("\n")
+            }
+          }
+        }
+      }
       val a = policy match {
-        case x: HeuristicPolicy[D, A, S] => x.predict(ex, state)
-        case y: ProbabilisticClassifierPolicy[D, A, S] => predictUsingPolicy(ex, state, y, permissibleActions, featureFunction, 0.0).head._1
+        case x: HeuristicPolicy[D, A, S] =>
+          expertAction
+        case y: ProbabilisticClassifierPolicy[D, A, S] =>
+          actionsAndScores.head._1
       }
 
       actions += a
@@ -358,8 +363,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     }
   }
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
-    trans: TransitionSystem[D, A, S], featureFunction: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float]): (Option[D], Array[A]) = {
-    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featureFunction, probability = 0.0, true) match { case (a, b, c) => (a, b) }
+    trans: TransitionSystem[D, A, S], featFn: FeatureFunction[D, S, A], debug: FileWriter): (Option[D], Array[A]) = {
+    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featFn, probability = 0.0, true, debug) match { case (a, b, c) => (a, b) }
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
@@ -369,7 +374,8 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float],
+  def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
+    features: FeatureFunction[D, S, A],
     lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
@@ -387,10 +393,10 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def helper(data: Iterable[D], postfix: String, iter: Integer, policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: (D, S, A) => gnu.trove.map.hash.THashMap[Int, Float], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
+    featFn: FeatureFunction[D, S, A], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
     utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null): (Double, List[(String, Double)]) = {
-    val debug = new FileWriter(options.DAGGER_OUTPUT_PATH + "Stats_debug.txt", true)
-    val decoded = data.map { d => decode(d, policy, trans, features) }
+    val debug = if (options.DEBUG) new FileWriter(options.DAGGER_OUTPUT_PATH + "Validation_debug_" + postfix + "_" + iter + ".txt", true) else null
+    val decoded = data.map { d => decode(d, policy, trans, featFn, debug) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {
       case ((d, decodePair), index) =>
         val (prediction, actions) = decodePair
@@ -411,7 +417,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
     }.foldLeft(0.0)(_ + _)
     val totalScore = score(data.zip(decoded filter { case (prediction, _) => prediction != None } map (_._1.get)))
-    debug.close()
+    if (debug != null) debug.close()
     (totalLoss, totalScore)
   }
 }

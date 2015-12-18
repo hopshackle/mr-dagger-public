@@ -24,7 +24,7 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
   lazy val correctLabels = labels.zip(costs).filter(_._2 == 0).map(_._1)
 
   lazy val correctCost = 0.0
-  
+
   var errors = err
 
   def fileFormat(actionToString: (T => String)): String = {
@@ -36,11 +36,35 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
     val costOutput = (costs map { c => f"${c}%.4f" } mkString ("\t")) + "\n"
     actionSize + errorCount + featureOutput + labelOutput + weightLabelOutput + costOutput + "END\n"
   }
-  
+
   def errorIncrement: Unit = {
-    errors +=1
+    errors += 1
   }
   def getErrorCount: Int = errors
+
+  def removeFeatures(toRemove: IndexedSeq[Int]): Instance[T] = {
+    val newFeatures = this.featureVector map
+      (_.filterNot { case (k, v) => toRemove.contains(k) }) map Instance.scalaMapToTrove
+    this.copy(feats = newFeatures)
+  }
+
+  def removeFeaturesII(toRemove: IndexedSeq[Int]): Instance[T] = {
+    import scala.collection.JavaConversions._
+    var newFeatureList: List[THashMap[Int, Float]] = List()
+    for (i <- 0 until feats.size) {
+      var prunedFeatures = new THashMap[Int, Float]()
+      for (j <- feats(i).keys) {
+        if (toRemove contains j) {
+          // do nothing
+        } else {
+          prunedFeatures.put(j, feats(i).get(j))
+        }
+      }
+      newFeatureList = prunedFeatures :: newFeatureList
+    }
+   
+    this.copy(feats = newFeatureList)
+  }
 
   override def toString = {
     "Instance:%s\n".format((0 until feats.size).map {
@@ -67,7 +91,7 @@ object Instance {
     val inputSplit = input.split("\n")
     val actionSize = inputSplit(0).toInt
     val errors = inputSplit(1).toInt
-    val features = ((2 to actionSize+1) map (i =>
+    val features = ((2 to actionSize + 1) map (i =>
       scalaMapToTrove((inputSplit(i).split("\t") map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) }).toMap))).toList
     val labels = inputSplit(actionSize + 2).split("\t") map stringToAction
     val weightLabels = inputSplit(actionSize + 3).split("\t") map stringToAction

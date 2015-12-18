@@ -5,6 +5,7 @@ import java.io.{ File, FileWriter }
 import collection.mutable.HashMap
 import scala.reflect.ClassTag
 import scala.util.Random
+import scala.language.postfixOps
 
 /**
  * Created with IntelliJ IDEA.
@@ -86,25 +87,26 @@ object AROWClassifier {
 object AROW {
 
   def train[T: ClassTag](data: Iterable[Instance[T]], weightLabels: Array[T], options: AROWOptions, init: Option[AROWClassifier[T]] = None): AROWClassifier[T] = {
-    val pruned = removeRareFeatures(data, options.RARE_FEATURE_COUNT)
+    val rareFeatures = removeRareFeatures(data, options.RARE_FEATURE_COUNT)
     val random = new Random(options.RANDOM_SEED)
     val model = init match {
       case Some(arow) => arow
       case None => AROWClassifier.empty[T](weightLabels = weightLabels)
     }
     val smoothing = if (options.TUNE_REGULARIZER) {
-      tuneSmoothingParameter(data = pruned, weightLabels = weightLabels, init = model, random)
+      tuneSmoothingParameter(data, rareFeatures, weightLabels = weightLabels, init = model, random)
     } else {
       options.SMOOTHING
     }
     trainFromClassifier(
-      data = pruned,
+      data = data,
+      rareFeats = rareFeatures,
       options = options,
       init = model,
       random = random)
   }
 
-  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
+  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rareFeats: IndexedSeq[Int], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
     // Begin training loop
     val rounds = options.TRAIN_ITERATIONS
     val verbose = options.VERBOSE
@@ -121,7 +123,8 @@ object AROW {
       for ((instance, i) <- instances.toIterator.zipWithIndex) {
         if (instance.getErrorCount < options.INSTANCE_ERROR_MAX) {
           if (verbose) println("Instance " + i)
-          val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random)
+          val pruned = instance.removeFeatures(rareFeats)
+          val (misClassification, newClassifier) = innerLoop(i, r, pruned, options, classifier, random)
           classifier = newClassifier
           if (misClassification) errors(r - 1) += 1
         }
@@ -257,35 +260,36 @@ object AROW {
   }
 
   // Remove rare features
-  def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Iterable[Instance[T]] = {
+  def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): IndexedSeq[Int] = {
     println("Rare Feature Count = " + count)
-    if (count == 0) return data
+    if (count == 0) return IndexedSeq()
     println("Removing Rare Features")
-    val fcounts = new collection.mutable.HashMap[Int, Double].withDefaultValue(0.0)
+    val fcounts = new collection.mutable.HashMap[Int, Int].withDefaultValue(0)
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.featureVector.flatten groupBy (_._1) mapValues (_.map(_._2))
-      maxValueMap = keys map { case (k, v) => (k, (v map Math.abs).max) }
-    } yield maxValueMap
+      keys = d.featureVector.flatten.map{_._1}.distinct
+    } yield keys
 
-    for (d <- reducedFeatures; f <- d) fcounts(f._1) = fcounts(f._1) + f._2
+    for (d <- reducedFeatures; f <- d) fcounts(f) = fcounts(f) + 1
 
-    val rareFeats = fcounts.collect { case (k, v) if v > count => k }.toSet
-    println(s"A Total of ${rareFeats.size} features remaining, with ${fcounts.size - rareFeats.size} removed.")
-    val out = data.map(d => d.copy(feats = ((0 until d.feats.size).toList map
-      (i => d.featureVector(i).filter { case (k, v) => rareFeats.contains(k) })) map Instance.scalaMapToTrove))
-    out
+    val rareFeats = fcounts filter (_._2 <= count) map (_._1) toIndexedSeq
+
+    println(s"A Total of ${rareFeats.size} features removed, with ${fcounts.size - rareFeats.size} remaining.")
+//    val out = data.map(d => d.copy(feats = d.featureVector map
+//      (_.filter { case (k, v) => commonFeats.contains(k) }) map Instance.scalaMapToTrove))
+    rareFeats
   }
+  
 
-  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
+  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], rareFeats: IndexedSeq[Int], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
     val (rtrain, rdev) = random.shuffle(data).partition(x => random.nextDouble() < 0.9)
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad
     val best = (-3 to 3).map(math.pow(10, _)).map { s =>
       val opt = new AROWOptions(Array[String]("--arow.smoothing", s.toString))
       opt.TRAIN_ITERATIONS = 10
-      val classifier = trainFromClassifier(rtrain, opt, init = init, random = random)
+      val classifier = trainFromClassifier(rtrain, rareFeats, opt, init = init, random = random)
       val cost = rdev.map(d => d.costOf(classifier.predict(d).maxLabels.head)).foldLeft(0.0)(_ + _)
       println("Cost for smoothing parameter = %.4f is %.2f\n".format(s, cost))
       (s, cost)
