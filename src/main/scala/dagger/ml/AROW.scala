@@ -21,14 +21,15 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
   def predict(instance: Instance[T]): Prediction[T] = {
     //  println("instance is null ?" + instance == null)
     //  println("size:" + instance.labels.size)
-
-    val scores = (instance.labels, instance.weightLabels, instance.featureVector).zipped map {
+    import scala.collection.JavaConversions._
+    val scores = (instance.labels, instance.weightLabels, instance.feats).zipped map {
       case (label, weightLabel, feats) =>
-        if (!weights.contains(weightLabel)) { 
+        val pruned = Instance.pruneRareFeatures(feats)
+        if (!weights.contains(weightLabel)) {
           weights(weightLabel) = new HashMap[Int, Float]
           cachedWeights(weightLabel) = new HashMap[Int, Float]
         }
-        label -> dotMap(feats, weights(weightLabel))
+        label -> dotMap(pruned, weights(weightLabel))
     }
     Prediction[T](label2score = scores.toMap)
   }
@@ -106,7 +107,7 @@ object AROW {
       random = random)
   }
 
-  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rareFeats: IndexedSeq[Int], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
+  private def trainFromClassifier[T: ClassTag](data: Iterable[Instance[T]], rareFeats: Set[Int], options: AROWOptions, init: AROWClassifier[T], random: Random): AROWClassifier[T] = {
     // Begin training loop
     val rounds = options.TRAIN_ITERATIONS
     val verbose = options.VERBOSE
@@ -117,14 +118,19 @@ object AROW {
     timer.start
     var classifier = init
     val errors = new Array[Double](rounds)
+    Instance.setRareFeatures(rareFeats)
+    // hack. should be tided up. The problem was that I want to keep all the features in the instance, because the instance also
+    // holds state information about number of errors made (for alpha bound), and the weight updates made historically (for averaging)
+    // So the previous attempt to create a copy of the instance with pruned data failed to track this...so in validating those two
+    // areas of functionality. Now the pruning occurs at the point of calculation/prediction in AROW.predict...but I store the rareFeature
+    // list in the Instance companion Object so that this is clearer to someone reading that code.
     for (r <- 1 to rounds) {
       if (verbose) println("Starting round " + r)
       val instances = if (options.SHUFFLE) random.shuffle(data) else data
       for ((instance, i) <- instances.toIterator.zipWithIndex) {
         if (instance.getErrorCount < options.INSTANCE_ERROR_MAX) {
           if (verbose) println("Instance " + i)
-          val pruned = instance.removeFeatures(rareFeats)
-          val (misClassification, newClassifier) = innerLoop(i, r, pruned, options, classifier, random)
+          val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random)
           classifier = newClassifier
           if (misClassification) errors(r - 1) += 1
         }
@@ -259,30 +265,26 @@ object AROW {
     dotMap(scalaMap, v2)
   }
 
-  // Remove rare features
-  def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): IndexedSeq[Int] = {
+  def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Set[Int] = {
     println("Rare Feature Count = " + count)
-    if (count == 0) return IndexedSeq()
+    if (count == 0) return Set()
     println("Removing Rare Features")
     val fcounts = new collection.mutable.HashMap[Int, Int].withDefaultValue(0)
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.featureVector.flatten.map{_._1}.distinct
+      keys = d.featureVector.flatten.map { _._1 }.distinct
     } yield keys
 
     for (d <- reducedFeatures; f <- d) fcounts(f) = fcounts(f) + 1
 
-    val rareFeats = fcounts filter (_._2 <= count) map (_._1) toIndexedSeq
+    val rareFeats = fcounts filter (_._2 <= count) map (_._1) toSet
 
     println(s"A Total of ${rareFeats.size} features removed, with ${fcounts.size - rareFeats.size} remaining.")
-//    val out = data.map(d => d.copy(feats = d.featureVector map
-//      (_.filter { case (k, v) => commonFeats.contains(k) }) map Instance.scalaMapToTrove))
     rareFeats
   }
-  
 
-  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], rareFeats: IndexedSeq[Int], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
+  def tuneSmoothingParameter[T: ClassTag](data: Iterable[Instance[T]], rareFeats: Set[Int], weightLabels: Array[T], init: AROWClassifier[T], random: Random): Double = {
     val (rtrain, rdev) = random.shuffle(data).partition(x => random.nextDouble() < 0.9)
     // Find smoothing with lowest aggregate cost in parameter sweep
     // Should be via a minBy but current implementation 2.10 is bad

@@ -72,12 +72,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         classifier = trainFromInstances(new FileInstances(fileNames, stringToAction, actionToString, options.INSTANCE_ERROR_MAX), trans.actions, old = classifier)
       }
 
+      val classifierToTest = if (options.AVERAGING) classifier.applyAveraging else classifier
+      val policyToTest = new ProbabilisticClassifierPolicy[D, A, S](classifierToTest)
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policy, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
+      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policyToTest, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
     }
-    if (options.AVERAGING) classifier = classifier.applyAveraging
 
     classifier
   }

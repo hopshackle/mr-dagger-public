@@ -2,7 +2,8 @@ package dagger.ml
 
 import collection.Map
 import scala.reflect.ClassTag
-import gnu.trove.map.hash.THashMap
+import gnu.trove.map.hash._
+import gnu.trove.procedure._
 
 /**
  * Created with IntelliJ IDEA.
@@ -42,28 +43,16 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
   }
   def getErrorCount: Int = errors
 
-  def removeFeatures(toRemove: IndexedSeq[Int]): Instance[T] = {
-    val newFeatures = this.featureVector map
-      (_.filterNot { case (k, v) => toRemove.contains(k) }) map Instance.scalaMapToTrove
-    this.copy(feats = newFeatures)
-  }
-
-  def removeFeaturesII(toRemove: IndexedSeq[Int]): Instance[T] = {
-    import scala.collection.JavaConversions._
-    var newFeatureList: List[THashMap[Int, Float]] = List()
+  // This method is not used .. it is slightly faster and more elegant, but does not make a copy, and updates fileCache in an unwanted fashion
+  def removeFeaturesII(toRemove: Set[Int]): Instance[T] = {
     for (i <- 0 until feats.size) {
-      var prunedFeatures = new THashMap[Int, Float]()
-      for (j <- feats(i).keys) {
-        if (toRemove contains j) {
-          // do nothing
-        } else {
-          prunedFeatures.put(j, feats(i).get(j))
+      feats(i).retainEntries(new TObjectObjectProcedure[Int, Float]() {
+        def execute(k: Int, v: Float): Boolean = {
+          !(toRemove contains k)
         }
-      }
-      newFeatureList = prunedFeatures :: newFeatureList
+      })
     }
-   
-    this.copy(feats = newFeatureList)
+    this
   }
 
   override def toString = {
@@ -78,6 +67,9 @@ case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], lab
 }
 
 object Instance {
+
+  var rareFeatures = Set[Int]()
+  def setRareFeatures(feat: Set[Int]): Unit = rareFeatures = feat
 
   def construct[T: ClassTag](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], ilabels: Array[T], icosts: Array[Float], correct: Array[Boolean]): Instance[T] = {
     assert(ilabels.size > 1 && icosts.size > 1, "Insufficient costs and labels (<1) for Instance.")
@@ -110,6 +102,19 @@ object Instance {
       output.put(key, scalaMap(key))
     }
     output
+  }
+
+  def pruneRareFeatures(feats: THashMap[Int, Float]): THashMap[Int, Float] = {
+    import scala.collection.JavaConversions._
+    var prunedFeatures = new THashMap[Int, Float]()
+    for (j <- feats.keys) {
+      if (rareFeatures contains j) {
+        // do nothing
+      } else {
+        prunedFeatures.put(j, feats.get(j))
+      }
+    }
+    prunedFeatures
   }
 
 }
