@@ -80,7 +80,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policyToTest, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
     }
 
-    classifier
+    if (options.AVERAGING) classifier.applyAveraging else classifier
   }
 
   def writeInstancesToFile(instances: Array[Instance[A]], iteration: Int, actionToString: (A => String)) {

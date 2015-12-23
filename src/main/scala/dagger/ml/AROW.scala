@@ -196,13 +196,13 @@ object AROW {
       val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
       val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
       //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
-      for (feat <- instance.featureVector(iMaxLabel).keys) {
+      for (feat <- (instance.featureVector(iMaxLabel).keySet diff Instance.rareFeatures)) {
         if (varianceVectors.contains(maxWeightLabel))
           zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
         else
           zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
       }
-      for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
+      for (feat <- (instance.featureVector(iMinCorrectLabel).keySet diff Instance.rareFeatures)) {
         if (varianceVectors.contains(minCorrectWeightLabel))
           zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
         else
@@ -238,12 +238,12 @@ object AROW {
         add(cachedWeightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha * classifier.averagingCounter)
       }
 
-      for (feat <- instance.featureVector(iMaxLabel).keys) {
+      for (feat <- instance.featureVector(iMaxLabel).keySet diff Instance.rareFeatures) {
         // AV: you can save yourself this if by initializing them in the beginning
         if (!varianceVectors.contains(maxWeightLabel)) varianceVectors(maxWeightLabel) = new HashMap[Int, Float]
         varianceVectors(maxWeightLabel)(feat) = varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorPredicted(feat), 2).toFloat
       }
-      for (feat <- instance.featureVector(iMinCorrectLabel).keys) {
+      for (feat <- instance.featureVector(iMinCorrectLabel).keySet diff Instance.rareFeatures) {
         // AV: you can save yourself this if by initializing them in the beginning
         if (!varianceVectors.contains(minCorrectWeightLabel)) varianceVectors(minCorrectWeightLabel) = new HashMap[Int, Float]
         varianceVectors(minCorrectWeightLabel)(feat) = (varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorMinCorrect(feat), 2)).toFloat
