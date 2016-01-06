@@ -316,7 +316,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
               for ((k, v) <- scalaMap) {
                 val feature = featureFunction.featureName(k)
                 val padding = " " * (40 - feature.size)
-                val weight = classifierPolicy.classifier.weightOf(a, k)
+                val weight = classifierPolicy.classifier.weightOf(a.getMasterLabel.asInstanceOf[A], k)
                 debug.write(f"$feature $padding $v%.2f \t Weight: $weight%.3f\n")
               }
               debug.write("\n")
