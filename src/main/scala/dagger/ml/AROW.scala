@@ -128,6 +128,7 @@ object AROW {
       if (verbose) println("Starting round " + r)
       val instances = if (options.SHUFFLE) random.shuffle(data) else data
       for ((instance, i) <- instances.toIterator.zipWithIndex) {
+        if (options.AROW_PRINT_INTERVAL > 0 && i % options.AROW_PRINT_INTERVAL == 0) print("\rRound %d...instance %d...".format(r, i))
         if (instance.getErrorCount < options.INSTANCE_ERROR_MAX) {
           if (verbose) println("Instance " + i)
           val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random)
@@ -162,9 +163,6 @@ object AROW {
   }
 
   def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], random: Random): (Boolean, AROWClassifier[T]) = {
-
-    if (options.AROW_PRINT_INTERVAL > 0 && i % options.AROW_PRINT_INTERVAL == 0) print("\rRound %d...instance %d...".format(r, i))
-
     //println(instance)
     // maxLabel refers to labels - NOT weightLabels
     val weightVectors = classifier.weights

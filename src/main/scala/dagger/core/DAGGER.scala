@@ -61,7 +61,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           }
           options.TRAIN_ITERATIONS = totalIterations
         } else {
-          classifier = trainFromInstances(instances, trans.actions, old = classifier)
+          classifier = trainFromInstances(instances, trans.actions, old = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier)
         }
 
       } else {
@@ -285,16 +285,20 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (permissibleActions.isEmpty) {
         return (None, actions.toArray, expertUsed.toArray)
       }
-      val policy = (rollIn, actionsTaken >= options.USE_EXPERT_ON_ROLLOUT_AFTER, (classifierPolicy.classifier == null || random.nextDouble <= prob)) match {
-        case (true, _, true) =>
+      val policy = (rollIn, options.EXPERT_HORIZON_ROLLOUT, actionsTaken >= options.USE_EXPERT_ON_ROLLOUT_AFTER, classifierPolicy.classifier == null, random.nextDouble <= prob) match {
+        case (_, _, _, true, _) =>
           expertUsed += true; expertPolicy
-        case (true, _, false) =>
-          expertUsed += false; classifierPolicy
-        case (false, false, false) =>
-          expertUsed += false; classifierPolicy
-        case (false, false, true) =>
+        case (true, _, _, _, true) =>
           expertUsed += true; expertPolicy
-        case (false, true, _) =>
+        case (true, _, _, _, false) =>
+          expertUsed += false; classifierPolicy
+        case (false, false, _, _, false) =>
+          expertUsed += false; classifierPolicy
+        case (false, false, _, _, true) =>
+          expertUsed += true; expertPolicy
+        case (false, true, false, _, _) =>
+          expertUsed += false; classifierPolicy
+        case (false, true, true, _, _) =>
           expertUsed += true; expertPolicy
       }
       val expertAction = if (expertPolicy != null) expertPolicy.predict(ex, state) else null.asInstanceOf[A]

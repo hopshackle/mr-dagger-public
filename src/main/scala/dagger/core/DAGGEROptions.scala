@@ -78,6 +78,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   lazy val COACHING_LAMBDA = getDouble("--coachingLambda", 0.0)
   
   lazy val RETRAIN_EACH_CLASSIFIER = getBoolean("--dropClassifier", false)
+  
+  lazy val EXPERT_HORIZON_ROLLOUT = getBoolean("--expertHorizon", false)
 
   override def toString = {
     "DAGGER Options:\n" +
