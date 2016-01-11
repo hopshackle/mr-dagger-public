@@ -45,6 +45,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       if (actionToString != null) {
         writeInstancesToFile(newInstances, i, actionToString)
       }
+      classifier = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier
       if (stringToAction == null) {
         val starting = instances.size
         instances = instances filter (i => i.getErrorCount < options.INSTANCE_ERROR_MAX)
@@ -55,13 +56,13 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
           val totalIterations = options.TRAIN_ITERATIONS
           options.TRAIN_ITERATIONS = 1
           for (j <- 1 to totalIterations) {
-            classifier = trainFromInstances(instances, trans.actions, old = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier)
-            if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), trans,
+            classifier = trainFromInstances(instances, trans.actions, old = classifier)
+            if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), expert, trans,
               featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
           }
           options.TRAIN_ITERATIONS = totalIterations
         } else {
-          classifier = trainFromInstances(instances, trans.actions, old = if (options.RETRAIN_EACH_CLASSIFIER) null.asInstanceOf[MultiClassClassifier[A]] else classifier)
+          classifier = trainFromInstances(instances, trans.actions, old = classifier)
         }
 
       } else {
@@ -77,7 +78,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policyToTest, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
+      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, policyToTest, expert, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
     }
 
     if (options.AVERAGING) classifier.applyAveraging else classifier
@@ -308,11 +309,18 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
         }
       else Seq()
 
+      val a = policy match {
+        case x: HeuristicPolicy[D, A, S] =>
+          expertAction
+        case y: ProbabilisticClassifierPolicy[D, A, S] =>
+          actionsAndScores.head._1
+      }
+
       if (options.DEBUG && debug != null) {
         debug.write("State:" + state + "\nExpertAction: " + expertAction + "\n")
         debug.write("\n" + (actionsAndScores map { case (action, score) => f"$action $score%.3f\t" }).mkString(" ") + "\n")
         if (options.ROLLOUT_THRESHOLD > 0.0) {
-          if (options.DETAIL_DEBUG) {
+          if (options.DETAIL_DEBUG && a != expertAction) {
             for (a <- actionsAndScores map { _._1 }) {
               debug.write(a + "\n")
               import scala.collection.JavaConversions._
@@ -327,12 +335,6 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             }
           }
         }
-      }
-      val a = policy match {
-        case x: HeuristicPolicy[D, A, S] =>
-          expertAction
-        case y: ProbabilisticClassifierPolicy[D, A, S] =>
-          actionsAndScores.head._1
       }
 
       actions += a
@@ -367,9 +369,9 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       case "PERCEPTRON" => ??? // Perceptron.train[A](instances, actions, options.RATE, random, options)
     }
   }
-  def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S],
+  def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S], expert: HeuristicPolicy[D, A, S],
     trans: TransitionSystem[D, A, S], featFn: FeatureFunction[D, S, A], debug: FileWriter): (Option[D], Array[A]) = {
-    unroll(ex, expertPolicy = null, classifierPolicy, start = trans.init(ex), trans, featFn, probability = 0.0, true, debug) match { case (a, b, c) => (a, b) }
+    unroll(ex, expert, classifierPolicy, start = trans.init(ex), trans, featFn, probability = 0.0, true, debug) match { case (a, b, c) => (a, b) }
   }
 
   def fork[T](data: Iterable[T], forkSize: Int): ParIterable[T] = {
@@ -379,16 +381,16 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     par
   }
 
-  def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    features: FeatureFunction[D, S, A],
+  def stats(trainingData: Iterable[D], iter: Integer, validationData: Iterable[D], policy: ProbabilisticClassifierPolicy[D, A, S],
+    expert: HeuristicPolicy[D, A, S], trans: TransitionSystem[D, A, S], features: FeatureFunction[D, S, A],
     lossFactory: LossFunctionFactory[D, A, S], score: Iterable[(D, D)] => List[(String, Double)], utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null) = {
     // Decode all instances, assuming
     val loss = lossFactory.newLossFunction
     val timer = new dagger.util.Timer
     timer.start()
 
-    val (validationLoss, validationScore) = helper(validationData, "val", iter, policy, trans, features, loss, score, utilityFunction)
-    val (trainingLoss, trainingScore) = helper(trainingData, "trng", iter, policy, trans, features, loss, score, utilityFunction)
+    val (validationLoss, validationScore) = helper(validationData, "val", iter, policy, expert, trans, features, loss, score, utilityFunction)
+    val (trainingLoss, trainingScore) = helper(trainingData, "trng", iter, policy, expert, trans, features, loss, score, utilityFunction)
 
     println(f"Mean Loss (Validation):\t${validationLoss / validationData.size}%.3f")
     println(f"Mean Loss (Training):\t${trainingLoss / trainingData.size}%.3f")
@@ -397,11 +399,12 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     println(s"Time taken for validation:\t$timer")
   }
 
-  def helper(data: Iterable[D], postfix: String, iter: Integer, policy: ProbabilisticClassifierPolicy[D, A, S], trans: TransitionSystem[D, A, S],
-    featFn: FeatureFunction[D, S, A], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
+  def helper(data: Iterable[D], postfix: String, iter: Integer, policy: ProbabilisticClassifierPolicy[D, A, S], expert: HeuristicPolicy[D, A, S],
+    trans: TransitionSystem[D, A, S], featFn: FeatureFunction[D, S, A], loss: LossFunction[D, A, S], score: Iterable[(D, D)] => List[(String, Double)],
     utilityFunction: (DAGGEROptions, String, Integer, D, D) => Unit = null): (Double, List[(String, Double)]) = {
     val debug = if (options.DEBUG) new FileWriter(options.DAGGER_OUTPUT_PATH + "Validation_debug_" + postfix + "_" + iter + ".txt", true) else null
-    val decoded = data.map { d => decode(d, policy, trans, featFn, debug) }
+
+    val decoded = data.map { d => decode(d, policy, expert, trans, featFn, debug) }
     val totalLoss = data.zip(decoded).zipWithIndex.map {
       case ((d, decodePair), index) =>
         val (prediction, actions) = decodePair

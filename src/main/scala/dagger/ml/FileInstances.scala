@@ -5,10 +5,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import java.io._
 
-class FileInstances[T: ClassTag](files: List[String], stringToAction: (String => T), actionToString: (T => String), errorLimit: Int) extends Iterable[Instance[T]] {
+class FileInstances[T: ClassTag](files: List[String], stringToAction: (String => T), actionToString: (T => String), errorLimit: Int, writeBack: Boolean = true) extends Iterable[Instance[T]] {
 
   def iterator: Iterator[Instance[T]] = {
-    new InstanceIterator[T](files, stringToAction, actionToString, errorLimit)
+    new InstanceIterator[T](files, stringToAction, actionToString, errorLimit, writeBack)
   }
 }
 
@@ -21,7 +21,11 @@ object FileInstances {
     new FileOutputStream(dest).getChannel.transferFrom(new FileInputStream(src).getChannel, 0, Long.MaxValue)
   }
 }
-class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String => T), actionToString: (T => String), errorLimit: Int) extends Iterator[Instance[T]] {
+class InstanceIterator[T: ClassTag](files: List[String],
+  stringToAction: (String => T),
+  actionToString: (T => String),
+  errorLimit: Int,
+  writeBack: Boolean = true) extends Iterator[Instance[T]] {
 
   var currentFile = nextFileContents(files(0))
   var nextFileIndex = 1
@@ -34,7 +38,7 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
       case true => true
       case false => {
         writeBackToFile(lastOutput)
-        currentFileBeingWrittenTo.close
+        if (writeBack) currentFileBeingWrittenTo.close
         false
       }
     }
@@ -52,8 +56,12 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
   }
 
   def nextFileContents(fileName: String): Iterator[Instance[T]] = {
-    FileInstances.copyFile(fileName, fileName + "_tmp")
-    val lines = io.Source.fromFile(fileName + "_tmp").getLines
+    if (writeBack) FileInstances.copyFile(fileName, fileName + "_tmp")
+    val fileToRead = writeBack match {
+      case true => fileName + "_tmp"
+      case false => fileName
+    }
+    val lines = io.Source.fromFile(fileToRead).getLines
 
     new Iterator[Instance[T]] {
       def hasNext: Boolean = lines.hasNext
@@ -71,16 +79,18 @@ class InstanceIterator[T: ClassTag](files: List[String], stringToAction: (String
     }
   }
   def writeBackToFile(i: Instance[T]) {
-    if (currentFileBeingWrittenTo != null && i != null && i.getErrorCount < errorLimit)
-      currentFileBeingWrittenTo.write(i.fileFormat(actionToString))
-    val fileName = files(nextFileIndex - 1)
+    if (writeBack) {
+      if (currentFileBeingWrittenTo != null && i != null && i.getErrorCount < errorLimit)
+        currentFileBeingWrittenTo.write(i.fileFormat(actionToString))
 
-    if (lastFileWrittenTo != fileName) {
-      if (currentFileBeingWrittenTo != null) currentFileBeingWrittenTo.close
-      currentFileBeingWrittenTo = new FileWriter(fileName, false)
-      lastFileWrittenTo = fileName
+      val fileName = files(nextFileIndex - 1)
+
+      if (lastFileWrittenTo != fileName) {
+        if (currentFileBeingWrittenTo != null) currentFileBeingWrittenTo.close
+        currentFileBeingWrittenTo = new FileWriter(fileName, false)
+        lastFileWrittenTo = fileName
+      }
     }
-
   }
 }
   
