@@ -1,5 +1,6 @@
 package dagger.util
 import dagger.ml._
+import dagger.core._
 import java.io._
 import scala.reflect.ClassTag
 
@@ -32,7 +33,15 @@ object InstanceAnalyser {
     total map { case (k, t) => (k, (t, detail2.getOrElse(k, Seq(0)))) }
   }
 
-  def featureDescription[T](instances: Iterator[Instance[T]], threshold: Int, featureName: (Int => String), fileName: String): Unit = {
+  def featureDescription[B <: TransitionState, A <: TransitionAction[B]](instances: Iterator[Instance[A]], threshold: Int, featureName: (Int => String),
+    fileName: String, classifier: MultiClassClassifier[A] = null): Unit = {
+
+    def prettify(key: Int, value: Float, action: A): String = {
+      val padding = " " * (50 - featureName(key).size)
+      val weight = if (classifier == null) 0.0f else classifier.weightOf(action.getMasterLabel.asInstanceOf[A], key)
+      f"${featureName(key)}$padding$value%.2f\t$weight%+.2f\n"
+    }
+
     val instancesToLog = instances filter (_.getErrorCount >= threshold)
     val output = new FileWriter(fileName)
     instancesToLog foreach {
@@ -44,10 +53,28 @@ object InstanceAnalyser {
         output.write("Errors Made   : " + i.getErrorCount + "\n")
         features foreach {
           case (k, v) =>
-            val padding = " " * (50 - featureName(k).size)
-            output.write(f"${featureName(k)}$padding$v%.2f\n")
+            val outputString = prettify(k, v, correctLabel)
+            output.write(outputString)
         }
         output.write("\n")
+        if (classifier != null) {
+          val prediction = classifier.predict(i)
+          val bestAction = prediction.maxLabel
+          val bestScore = prediction.maxScore
+          val correctLabelScore = prediction.label2score(correctLabel)
+          if (bestAction == correctLabel) {
+            output.write("Final Classifier chooses correct action.\n")
+          } else {
+            val bestFeatures = i.featureVector(i.labels indexOf bestAction)
+            output.write(f"\nScore of Correct Label is $correctLabelScore%.2f. Best Score is $bestScore%.2f for $bestAction\n")
+            bestFeatures foreach {
+              case (k, v) =>
+                val outputString = prettify(k, v, bestAction)
+                output.write(outputString)
+            }
+          }
+          output.write("\n")
+        }
     }
     output.close
   }
