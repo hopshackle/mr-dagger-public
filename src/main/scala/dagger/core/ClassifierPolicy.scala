@@ -22,11 +22,11 @@ case class ProbabilisticClassifierPolicy[D, A <: TransitionAction[S], S <: Trans
       classifier.predict(instance).maxLabels
   }
   
-    def predict(ex: D, instance: Instance[A], state: S, threshold: Double = 0.0): Seq[(A, Float)] = {
+    def predict(ex: D, instance: Instance[A], state: S, threshold: Double = 0.0, optionLimit: Int = 20): Seq[(A, Float)] = {
     if (threshold == 0.0)
       classifier.predict(instance).maxLabels map { x=> (x, 0.0f)}
     else
-      classifier.predict(instance).maxLabelsWithinThreshold(threshold)
+      classifier.predict(instance).maxLabelsWithinThreshold(threshold, optionLimit)
   }
 
 }
