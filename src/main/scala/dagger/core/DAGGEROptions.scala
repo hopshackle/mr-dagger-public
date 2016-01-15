@@ -67,6 +67,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   
   lazy val ROLLOUT_THRESHOLD = getDouble("--threshold", 0.0)
   
+  lazy val ROLLOUT_LIMIT = getInt("--rolloutLimit", 100)
+  
   var USE_EXPERT_ON_ROLLOUT_AFTER = getInt("--expertAfter", 300)
   
   lazy val EXPERT_HORIZON_INCREMENT = getInt("--expertHorizonInc", 0)

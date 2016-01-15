@@ -142,7 +142,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             val allPermissibleActions = trans.permissibleActions(state)
             val nextExpertAction = expert.chooseTransition(d, state)
             val nextPolicyActionsAndScores = if (policy.classifier != null)
-              predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features, options.ROLLOUT_THRESHOLD)
+              predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features)
             else {
               // pick a non-expert action at random
               val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
@@ -304,7 +304,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
       }
       val expertAction = if (expertPolicy != null) expertPolicy.predict(ex, state) else null.asInstanceOf[A]
       val actionsAndScores = if (classifierPolicy.classifier != null)
-        predictUsingPolicy(ex, state, classifierPolicy, permissibleActions, featureFunction.features, options.ROLLOUT_THRESHOLD) sortWith {
+        predictUsingPolicy(ex, state, classifierPolicy, permissibleActions, featureFunction.features) sortWith {
           case ((a1: A, s1: Float), (a2: A, s2: Float)) => s1 > s2
         }
       else Seq()
@@ -348,11 +348,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
   }
 
   def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A],
-    featureFunction: (D, S, A) => THashMap[Int, Float], threshold: Double): Seq[(A, Float)] = {
+    featureFunction: (D, S, A) => THashMap[Int, Float]): Seq[(A, Float)] = {
     val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
     val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
       permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
-    val prediction = policy.predict(ex, instance, state, threshold)
+    val prediction = policy.predict(ex, instance, state, options.ROLLOUT_THRESHOLD, options.ROLLOUT_LIMIT)
     prediction
   }
 
