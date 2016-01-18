@@ -17,7 +17,7 @@ import gnu.trove.map.hash.THashMap
 /**
  * Created by narad on 4/6/15.
  */
-class OracleExtractor[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
+class OracleExtractor[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
 
   val helperDagger = new DAGGER[D, A, S](options)
 

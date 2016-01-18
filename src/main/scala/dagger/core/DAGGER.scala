@@ -18,7 +18,7 @@ import gnu.trove.map.hash.THashMap
 // D = Data
 // A = Action
 // S = State
-class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
+class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
   val random = new Random(options.RANDOM_SEED)
 
   def train(data: Iterable[D],
@@ -104,10 +104,11 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
     var lossOnTestSet = List[Double]()
     var processedSoFar = 0
     val dataWithIndex = data.zipWithIndex
-    val MAX_ACTIONS = options.MAX_ACTIONS
+    val original_MAX_ACTIONS = options.MAX_ACTIONS
 
     val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
       case (d, dcount) =>
+        val MAX_ACTIONS = Math.max(original_MAX_ACTIONS, d.size * options.ACTIONS_PER_SIZE)
         val instances = new ArrayBuffer[Instance[A]]
         // We create new Loss and Feature functions each time for thread-safety as they cache some results for performance reasons
         val loss = lossFactory.newLossFunction
@@ -237,7 +238,7 @@ class DAGGER[D: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionSta
             state = a(state)
             instance
         }
-        options.MAX_ACTIONS = MAX_ACTIONS
+        options.MAX_ACTIONS = original_MAX_ACTIONS
         this.synchronized {
           processedSoFar += 1
           if (processedSoFar % options.DAGGER_PRINT_INTERVAL == 0) {
