@@ -85,6 +85,12 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   
   lazy val EXPERT_HORIZON_ROLLOUT = getBoolean("--expertHorizon", false)
 
+  lazy val MAX_TRAINING_SIZE = getInt("--maxTrainingSize", 100)
+  
+  lazy val MIN_TRAINING_SIZE = getInt("--minTrainingSize", 20)
+  
+  lazy val TRAINING_SIZE_INC = getInt("--trainingSizeInc", 10)
+  
   override def toString = {
     "DAGGER Options:\n" +
       "  DAGGER Iterations: %d\n".format(DAGGER_ITERATIONS) +

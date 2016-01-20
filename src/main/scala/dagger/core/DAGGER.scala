@@ -38,10 +38,13 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     var classifier = startingClassifier
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
     for (i <- 1 to options.DAGGER_ITERATIONS) {
+      val maxTrainingSizeThisIteration = Math.min(options.MAX_TRAINING_SIZE, options.MIN_TRAINING_SIZE + (i - 1) * options.TRAINING_SIZE_INC)
+      val filteredData = data filter (_.size <= maxTrainingSizeThisIteration)
+      println(s"${filteredData.size} smallest data samples being used out of ${data.size}")
       if (i > 1) options.USE_EXPERT_ON_ROLLOUT_AFTER += options.EXPERT_HORIZON_INCREMENT
       val prob = options.INITIAL_EXPERT_PROB * math.pow(1.0 - options.POLICY_DECAY, i - 1)
       println("DAGGER iteration %d of %d with P(oracle) = %.2f".format(i, options.DAGGER_ITERATIONS, prob))
-      val newInstances = collectInstances(data, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
+      val newInstances = collectInstances(filteredData, expert, policy, featureFactory, trans, lossFactory, prob, i, utilityFunction)
       if (actionToString != null) {
         writeInstancesToFile(newInstances, i, actionToString)
       }
@@ -57,7 +60,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
           options.TRAIN_ITERATIONS = 1
           for (j <- 1 to totalIterations) {
             classifier = trainFromInstances(instances, trans.actions, old = classifier)
-            if (dev.nonEmpty) stats(data, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), expert, trans,
+            if (dev.nonEmpty) stats(filteredData, j, dev, new ProbabilisticClassifierPolicy[D, A, S](classifier), expert, trans,
               featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
           }
           options.TRAIN_ITERATIONS = totalIterations
