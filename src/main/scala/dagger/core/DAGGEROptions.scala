@@ -25,7 +25,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   var DAGGER_OUTPUT_PATH = getString("--dagger.output.path", "./")
 
-  lazy val DAGGER_PRINT_INTERVAL = getInt("--dagger.print.interval", 100)
+  lazy val DAGGER_PRINT_INTERVAL = getInt("--dagger.print.interval", 1)
 
   lazy val DAGGER_SERIALIZE_FILE = getString("--dagger.serialize.file", "serialization.txt")
 
@@ -39,7 +39,7 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   lazy val NUM_CORES = getInt("--num.cores", 1)
 
-  lazy val NUM_SAMPLES = getInt("--samples", 3)
+  lazy val NUM_SAMPLES = getInt("--samples", 1)
 
   lazy val POLICY_DECAY = getDouble("--policy.decay", 0.2)
 
@@ -87,9 +87,11 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
 
   lazy val MAX_TRAINING_SIZE = getInt("--maxTrainingSize", 100)
   
-  lazy val MIN_TRAINING_SIZE = getInt("--minTrainingSize", 20)
+  lazy val MIN_TRAINING_SIZE = getInt("--minTrainingSize", 100)
   
   lazy val TRAINING_SIZE_INC = getInt("--trainingSizeInc", 10)
+  
+  lazy val LOG_TRAINING_STATS = getBoolean("--logTrainingStats", true)
   
   override def toString = {
     "DAGGER Options:\n" +

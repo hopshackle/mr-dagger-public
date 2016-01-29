@@ -41,7 +41,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
     if (!file.getParentFile.exists()) file.getParentFile.mkdirs()
     val out = new FileWriter(filename)
     for (label <- weights.keys; (f, w) <- weights(label)) {
-      out.write(actionToString(label) + "\t" + f + "\t" + w + "\n")
+      if (actionToString != null) out.write(actionToString(label) + "\t" + f + "\t" + w + "\n")
     }
     out.close()
   }
