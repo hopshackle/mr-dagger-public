@@ -156,7 +156,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
               val allChoices = (if (excludingExpertChoice.size > numberToPick) {
                 val randomNumbers = Random.shuffle[Int, Seq](Range(0, excludingExpertChoice.size)) take numberToPick
                 randomNumbers map excludingExpertChoice toArray
-              } else allPermissibleActions)
+              } else excludingExpertChoice)
               allChoices.toSeq map { x => (x, 0.0f) }
             }
 
