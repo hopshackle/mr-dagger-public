@@ -12,7 +12,8 @@ import gnu.trove.procedure._
  * Time: 2:43 PM
  */
 // A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag
-case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], costs: Array[Float] = null, err: Int = 0) {
+case class Instance[T](feats: List[gnu.trove.map.hash.THashMap[Int, Float]], labels: Array[T], weightLabels: Array[T], 
+    costs: Array[Float] = null, err: Int = 0) {
 
   lazy val featureVector = feats map (i => Instance.troveMapToScala(i))
 

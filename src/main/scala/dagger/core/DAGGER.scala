@@ -423,13 +423,12 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     val decoded = data.map {
       d => decode(d, policy, expert, trans, featFn, debug)
     }
-    println("Decoded " + postfix)
     val totalLoss = data.zip(decoded).zipWithIndex.map {
       case ((d, decodePair), index) =>
         val (prediction, actions) = decodePair
         prediction match {
           case Some(structure) =>
-            if (index % 50 == 0) println("Calculating " + (index + 1))
+            if (index % 200 == 0) println("Calculating " + (index + 1))
             if (utilityFunction != null) utilityFunction(options, postfix + "_" + iter, (index + 1), structure, d)
             if (options.DEBUG) {
               debug.write("Target = " + d + "\n")
