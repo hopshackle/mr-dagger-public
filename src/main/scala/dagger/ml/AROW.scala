@@ -19,12 +19,10 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
-    //  println("instance is null ?" + instance == null)
-    //  println("size:" + instance.labels.size)
     import scala.collection.JavaConversions._
-    val scores = (instance.labels, instance.weightLabels, instance.feats).zipped map {
-      case (label, weightLabel, feats) =>
-        val pruned = Instance.pruneRareFeatures(feats)
+    val scores = (instance.labels, instance.weightLabels, (0 until instance.labels.size)).zipped map {
+      case (label, weightLabel, index) =>
+        val pruned = Instance.pruneRareFeatures(instance.feats(index))
         if (!weights.contains(weightLabel)) {
           weights(weightLabel) = new HashMap[Int, Float]
           cachedWeights(weightLabel) = new HashMap[Int, Float]
@@ -271,7 +269,9 @@ object AROW {
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.featureVector.flatten.map { _._1 }.distinct
+      keys = d.coreFeatsScala.keySet ++ ( d.parameterFeats flatMap {
+        case(k, v)  => Instance.troveMapToScala(v).keySet
+      })
     } yield keys
 
     for (d <- reducedFeatures; f <- d) fcounts(f) = fcounts(f) + 1

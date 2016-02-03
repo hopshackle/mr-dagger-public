@@ -227,7 +227,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
 
             val allFeatures = permissibleActions map (a => featFn.features(d, state, a))
             val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-            val instance = new Instance[A](allFeatures.toList, permissibleActions, weightLabels, normedCosts map (_.toFloat))
+            val instance = new Instance[A](allFeatures(0)._1, extractParameterFeatures(allFeatures), permissibleActions, weightLabels, normedCosts map (_.toFloat))
 
             if (options.DEBUG) {
               debug.write("Actions = " + permissibleActions.mkString(", ") + "\n")
@@ -334,7 +334,8 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
             for (a <- actionsAndScores map { _._1 }) {
               debug.write(a + "\n")
               import scala.collection.JavaConversions._
-              val scalaMap: Map[Int, Float] = featureFunction.features(ex, state, a)
+              val features = featureFunction.features(ex, state, a)
+              val scalaMap: Map[Int, Float] = features._1 ++ features._2
               for ((k, v) <- scalaMap) {
                 val feature = featureFunction.featureName(k)
                 val padding = " " * (50 - feature.size)
@@ -356,11 +357,16 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     }
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
+  
+  def extractParameterFeatures(featFnOutput: Array[(THashMap[Int, Float], THashMap[Int, Float])]): Map[Int, THashMap[Int, Float]] = {
+    (featFnOutput.zipWithIndex filterNot (_._1._2.isEmpty) map { case (f, i) => (i -> f._2) }).toMap
+  }
 
   def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A],
-    featureFunction: (D, S, A) => THashMap[Int, Float]): Seq[(A, Float)] = {
+    featureFunction: (D, S, A) => (THashMap[Int, Float], THashMap[Int, Float])): Seq[(A, Float)] = {
     val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
-    val instance = new Instance[A]((permissibleActions map (a => featureFunction(ex, state, a))).toList,
+    val features = permissibleActions map (a => featureFunction(ex, state, a))
+    val instance = new Instance[A](features(0)._1, extractParameterFeatures(features),
       permissibleActions, weightLabels, permissibleActions.map(_ => 0.0f))
     val prediction = policy.predict(ex, instance, state, options.ROLLOUT_THRESHOLD, options.ROLLOUT_LIMIT)
     prediction
