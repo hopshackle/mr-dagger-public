@@ -22,8 +22,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
     import scala.collection.JavaConversions._
     val scores = (instance.labels, instance.weightLabels, (0 until instance.labels.size)).zipped map {
       case (label, weightLabel, index) =>
-        val pruned = Instance.pruneRareFeatures(instance.feats(index))
-  //      val pruned = instance.feats(index)
+        val pruned = if (Instance.rareFeatures.isEmpty) instance.feats(index) else Instance.pruneRareFeatures(instance.feats(index))
         if (!weights.contains(weightLabel)) {
           weights(weightLabel) = new HashMap[Int, Float]
           cachedWeights(weightLabel) = new HashMap[Int, Float]
