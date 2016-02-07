@@ -9,7 +9,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 import scala.util.Random
-import gnu.trove.map.hash.THashMap
 
 /**
  * Created by narad on 6/10/14.
@@ -358,12 +357,12 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
   
-  def extractParameterFeatures(featFnOutput: Array[(THashMap[Int, Float], THashMap[Int, Float])]): Map[Int, THashMap[Int, Float]] = {
+  def extractParameterFeatures(featFnOutput: Array[(Map[Int, Float], Map[Int, Float])]): Map[Int, Map[Int, Float]] = {
     (featFnOutput.zipWithIndex filterNot (_._1._2.isEmpty) map { case (f, i) => (i -> f._2) }).toMap
   }
 
   def predictUsingPolicy(ex: D, state: S, policy: ProbabilisticClassifierPolicy[D, A, S], permissibleActions: Array[A],
-    featureFunction: (D, S, A) => (THashMap[Int, Float], THashMap[Int, Float])): Seq[(A, Float)] = {
+    featureFunction: (D, S, A) => (Map[Int, Float], Map[Int, Float])): Seq[(A, Float)] = {
     val weightLabels = permissibleActions map (_.getMasterLabel.asInstanceOf[A])
     val features = permissibleActions map (a => featureFunction(ex, state, a))
     val instance = new Instance[A](features(0)._1, extractParameterFeatures(features),

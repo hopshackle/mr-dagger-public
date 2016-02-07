@@ -1,6 +1,6 @@
 package dagger.core
-import gnu.trove.map.hash.THashMap
 
+import scala.collection.Map
 import scala.reflect.ClassTag
 abstract class FeatureFunctionFactory[D: ClassTag, S <: TransitionState: ClassTag, A <: TransitionAction[S]: ClassTag] {
   def newFeatureFunction: FeatureFunction[D, S, A]
@@ -10,7 +10,7 @@ abstract class FeatureFunction[D: ClassTag, S <: TransitionState: ClassTag, A <:
   /* 
    * First part of tuple is core features, second part is action-specific features
    */
-  def features(data: D, state: S, action: A): (gnu.trove.map.hash.THashMap[Int, Float], gnu.trove.map.hash.THashMap[Int, Float])
+  def features(data: D, state: S, action: A): (Map[Int, Float], Map[Int, Float])
   
   def featureName(key: Int): String
 }

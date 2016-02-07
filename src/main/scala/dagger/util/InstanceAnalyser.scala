@@ -48,7 +48,7 @@ object InstanceAnalyser {
       i =>
         val correctLabel = i.correctLabels.head
         val labelIndex = i.labels indexOf correctLabel
-        val features = i.featureVector(labelIndex)
+        val features = i.feats(labelIndex)
         output.write("Correct Action: " + correctLabel + "\n")
         output.write("Errors Made   : " + i.getErrorCount + "\n")
         features foreach {
@@ -65,7 +65,7 @@ object InstanceAnalyser {
           if (bestAction == correctLabel) {
             output.write("Final Classifier chooses correct action.\n")
           } else {
-            val bestFeatures = i.featureVector(i.labels indexOf bestAction)
+            val bestFeatures = i.feats(i.labels indexOf bestAction)
             output.write(f"\nScore of Correct Label is $correctLabelScore%.2f. Best Score is $bestScore%.2f for $bestAction\n")
             bestFeatures foreach {
               case (k, v) =>

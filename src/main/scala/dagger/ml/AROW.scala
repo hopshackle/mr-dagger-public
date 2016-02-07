@@ -2,6 +2,7 @@ package dagger.ml
 
 import java.io.{ File, FileWriter }
 
+import collection.Map
 import collection.mutable.HashMap
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -19,7 +20,6 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
-    import scala.collection.JavaConversions._
     val scores = (instance.labels, instance.weightLabels, (0 until instance.labels.size)).zipped map {
       case (label, weightLabel, index) =>
         val pruned = if (Instance.rareFeatures.isEmpty) instance.feats(index) else Instance.pruneRareFeatures(instance.feats(index))
@@ -192,21 +192,21 @@ object AROW {
       val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
       val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
       //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
-      for (feat <- (instance.featureVector(iMaxLabel).keySet diff Instance.rareFeatures)) {
+      for (feat <- (instance.feats(iMaxLabel).keySet diff Instance.rareFeatures)) {
         if (varianceVectors.contains(maxWeightLabel))
-          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
+          zVectorPredicted(feat) = instance.feats(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
         else
-          zVectorPredicted(feat) = instance.featureVector(iMaxLabel)(feat)
+          zVectorPredicted(feat) = instance.feats(iMaxLabel)(feat)
       }
-      for (feat <- (instance.featureVector(iMinCorrectLabel).keySet diff Instance.rareFeatures)) {
+      for (feat <- (instance.feats(iMinCorrectLabel).keySet diff Instance.rareFeatures)) {
         if (varianceVectors.contains(minCorrectWeightLabel))
-          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
+          zVectorMinCorrect(feat) = instance.feats(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
         else
-          zVectorMinCorrect(feat) = instance.featureVector(iMinCorrectLabel)(feat)
+          zVectorMinCorrect(feat) = instance.feats(iMinCorrectLabel)(feat)
       }
 
-      val preDot = dotMap(instance.featureVector(iMaxLabel), zVectorPredicted)
-      val minDot = dotMap(instance.featureVector(iMinCorrectLabel), zVectorMinCorrect)
+      val preDot = dotMap(instance.feats(iMaxLabel), zVectorPredicted)
+      val minDot = dotMap(instance.feats(iMinCorrectLabel), zVectorMinCorrect)
       val confidence = preDot + minDot
 
       val beta = 1.0f / (confidence + options.SMOOTHING.toFloat)
@@ -234,12 +234,12 @@ object AROW {
         add(cachedWeightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha * classifier.averagingCounter)
       }
 
-      for (feat <- instance.featureVector(iMaxLabel).keySet diff Instance.rareFeatures) {
+      for (feat <- instance.feats(iMaxLabel).keySet diff Instance.rareFeatures) {
         // AV: you can save yourself this if by initializing them in the beginning
         if (!varianceVectors.contains(maxWeightLabel)) varianceVectors(maxWeightLabel) = new HashMap[Int, Float]
         varianceVectors(maxWeightLabel)(feat) = varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorPredicted(feat), 2).toFloat
       }
-      for (feat <- instance.featureVector(iMinCorrectLabel).keySet diff Instance.rareFeatures) {
+      for (feat <- instance.feats(iMinCorrectLabel).keySet diff Instance.rareFeatures) {
         // AV: you can save yourself this if by initializing them in the beginning
         if (!varianceVectors.contains(minCorrectWeightLabel)) varianceVectors(minCorrectWeightLabel) = new HashMap[Int, Float]
         varianceVectors(minCorrectWeightLabel)(feat) = (varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorMinCorrect(feat), 2)).toFloat
@@ -252,25 +252,20 @@ object AROW {
     for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
 
-  def dotMap(v1: collection.Map[Int, Float], v2: collection.Map[Int, Float]): Float = {
+  def dotMap(v1: Map[Int, Float], v2: Map[Int, Float]): Float = {
     v1.foldLeft(0.0f) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0f) }
-  }
-
-  def dotMap(v1: gnu.trove.map.hash.THashMap[Int, Float], v2: collection.Map[Int, Float]): Float = {
-    val scalaMap = Instance.troveMapToScala(v1)
-    dotMap(scalaMap, v2)
   }
 
   def removeRareFeatures[T](data: Iterable[Instance[T]], count: Int = 0): Set[Int] = {
     println("Rare Feature Count = " + count)
     if (count == 0) return Set()
     println("Removing Rare Features")
-    val fcounts = new collection.mutable.HashMap[Int, Int].withDefaultValue(0)
+    val fcounts = new HashMap[Int, Int].withDefaultValue(0)
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.coreFeatsScala.keySet ++ ( d.parameterFeats flatMap {
-        case(k, v)  => Instance.troveMapToScala(v).keySet
+      keys = d.coreFeats.keySet ++ ( d.parameterFeats flatMap {
+        case(k, v)  => v.keySet
       })
     } yield keys
 

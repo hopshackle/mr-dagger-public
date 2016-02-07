@@ -11,7 +11,7 @@ import scala.util.Random
 /**
  * Created by narad on 4/6/15.
  */
-class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Float]]) extends MultiClassClassifier[T] {
+class PassiveAggressiveClassifier[T](val weights: Map[T, Map[Int, Float]]) extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
     val scores: Map[T, Float] = if (weights.isEmpty) {
@@ -19,7 +19,7 @@ class PassiveAggressiveClassifier[T](val weights: HashMap[T, HashMap[Int, Float]
     } else {
       ((instance.labels.toList.zipWithIndex) map {
         case (label, i) =>
-          label -> dotMap(instance.featureVector(i), weights(label))
+          label -> dotMap(instance.feats(i), weights(label))
       }).toMap
     }
     Prediction[T](label2score = scores)
@@ -77,7 +77,7 @@ object PassiveAggressive {
 
           for (label <- Array(minCorrectLabel)) {
             val iLabel = labelList.indexOf(label)
-            val score = dotMap(instance.featureVector(iLabel), weightVectors(label))
+            val score = dotMap(instance.feats(iLabel), weightVectors(label))
             if (score < minCorrectScore) {
               minCorrectScore = score
               minCorrectLabel = label
@@ -86,12 +86,12 @@ object PassiveAggressive {
 
           val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
           val loss = (maxScore - minCorrectScore + math.sqrt(instance.costOf(maxLabel))).toFloat
-          val norm = 2 * (dotMap(instance.featureVector(iMinCorrectLabel), instance.featureVector(iMinCorrectLabel)))
+          val norm = 2 * (dotMap(instance.feats(iMinCorrectLabel), instance.feats(iMinCorrectLabel)))
           val factor = loss / (norm + (1.0f / (2 * smoothing)))
 
           val iMaxLabel = labelList.indexOf(maxLabel)
-          add(weightVectors(maxLabel), instance.featureVector(iMaxLabel), -1.0f * factor)
-          add(weightVectors(minCorrectLabel), instance.featureVector(iMinCorrectLabel), factor)
+          add(weightVectors(maxLabel), instance.feats(iMaxLabel), -1.0f * factor)
+          add(weightVectors(minCorrectLabel), instance.feats(iMinCorrectLabel), factor)
         }
       }
       classifier = new PassiveAggressiveClassifier[T](weightVectors)
