@@ -19,12 +19,12 @@ case class Instance[T](coreFeats: gnu.trove.map.hash.THashMap[Int, Float], param
 
   import Instance.troveMapToScala
   lazy val coreFeatsScala = troveMapToScala(coreFeats)
-//  lazy val featureVector = {
-//    labels.zipWithIndex map { case (l, i) => coreFeatsScala ++ troveMapToScala(parameterFeats(i)) }
-//  }
-  
+  //  lazy val featureVector = {
+  //    labels.zipWithIndex map { case (l, i) => coreFeatsScala ++ troveMapToScala(parameterFeats(i)) }
+  //  }
+
   def featureVector(labelRef: Int): Map[Int, Float] = {
-    coreFeatsScala ++ ( if (parameterFeats.contains(labelRef)) troveMapToScala(parameterFeats(labelRef)) else Map())
+    coreFeatsScala ++ (if (parameterFeats.contains(labelRef)) troveMapToScala(parameterFeats(labelRef)) else Map())
   }
   def feats(labelRef: Int): gnu.trove.map.hash.THashMap[Int, Float] = {
     if (!parameterFeats.contains(labelRef))
@@ -56,11 +56,11 @@ case class Instance[T](coreFeats: gnu.trove.map.hash.THashMap[Int, Float], param
 
   def fileFormat(actionToString: (T => String)): String = {
     def featureToString(f: (Int, Float)): String = f"${f._1}:${f._2}%.2f"
-    def featureMapToString(m: Map[Int, Float]): String = m map featureToString mkString ("\t") + "\n"
+    def featureMapToString(m: Map[Int, Float]): String = (m map featureToString mkString ("\t")) + "\n"
     val actionSize = labels.size + "\n"
     val errorCount = getErrorCount + "\n"
     val coreFeatureOutput = featureMapToString(coreFeatsScala)
-    val parameterFeatureOutput = parameterFeats map { case (k, v) => k.toString + "\t" + featureMapToString(troveMapToScala(v)) }
+    val parameterFeatureOutput = (parameterFeats map { case (k, v) => k.toString + "\t" + featureMapToString(troveMapToScala(v)) }).mkString("")
     val labelOutput = (labels map actionToString mkString ("\t")) + "\n"
     val weightLabelOutput = (weightLabels map actionToString mkString ("\t")) + "\n"
     val costOutput = (costs map { c => f"${c}%.4f" } mkString ("\t")) + "\n"
@@ -82,7 +82,7 @@ case class Instance[T](coreFeats: gnu.trove.map.hash.THashMap[Int, Float], param
 object Instance {
 
   var rareFeatures = Set[Int]()
-  val dummyFeatures = (0 -> (new gnu.trove.map.hash.THashMap[Int, Float]()))
+  val dummyFeatures = (-1 -> (new gnu.trove.map.hash.THashMap[Int, Float]()))
   def setRareFeatures(feat: Set[Int]): Unit = rareFeatures = feat
 
   def construct[T: ClassTag](coreFeats: gnu.trove.map.hash.THashMap[Int, Float],
@@ -104,6 +104,7 @@ object Instance {
     def featuresToIndexAndTroveMap(rawFeatures: String): (Int, gnu.trove.map.hash.THashMap[Int, Float]) = {
       val splitFeatures = rawFeatures.split("\t")
       val troveMap = scalaMapToTrove(splitFeatures.drop(1) map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) } toMap)
+ //     println(troveMap)
       (splitFeatures(0).toInt, troveMap)
     }
     val inputSplit = input.split("\n")
@@ -119,18 +120,19 @@ object Instance {
           endFeatures = true
           dummyFeatures
         } else {
-          featuresToIndexAndTroveMap(inputSplit(lineNumber))
+          featuresToIndexAndTroveMap(nextLine)
         }
+      } else {
+        dummyFeatures
       }
-      dummyFeatures
     }) toMap
 
-    val features = ((2 to actionSize + 1) map (i =>
-      scalaMapToTrove((inputSplit(i).split("\t") map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) }).toMap))).toList
-    val labels = inputSplit(actionSize + 2).split("\t") map stringToAction
-    val weightLabels = inputSplit(actionSize + 3).split("\t") map stringToAction
-    val costs = inputSplit(actionSize + 4).split("\t") map { i => i.toFloat }
-    new Instance[T](coreFeatures, parameterFeatures, labels, weightLabels, costs, errors)
+    val cleanedParameterFeatures = parameterFeatures filterNot { case (k, v) => v.isEmpty }
+    val parameterLines = cleanedParameterFeatures.size
+    val labels = inputSplit(4 + parameterLines).split("\t") map stringToAction
+    val weightLabels = inputSplit(5 + parameterLines).split("\t") map stringToAction
+    val costs = inputSplit(6 + parameterLines).split("\t") map { i => i.toFloat }
+    new Instance[T](coreFeatures, cleanedParameterFeatures, labels, weightLabels, costs, errors)
   }
 
   def troveMapToScala(trove: gnu.trove.map.hash.THashMap[Int, Float]): Map[Int, Float] = {
