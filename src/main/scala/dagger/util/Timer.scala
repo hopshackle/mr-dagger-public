@@ -30,9 +30,9 @@ class Timer {
     if (divisor == 0) return "-NA-"
     val etime = elapsedTime() / (divisor * 1000)
     if (etime > 60)
-      "%1.1fm".format(etime/60)
+      "%1.2fm".format(etime/60)
     else
-      "%1.4fs".format(etime)
+      "%1.2fs".format(etime)
   }
 
 }

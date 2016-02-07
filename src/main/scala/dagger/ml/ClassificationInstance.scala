@@ -104,7 +104,7 @@ object Instance {
     def featuresToIndexAndTroveMap(rawFeatures: String): (Int, gnu.trove.map.hash.THashMap[Int, Float]) = {
       val splitFeatures = rawFeatures.split("\t")
       val troveMap = scalaMapToTrove(splitFeatures.drop(1) map { t => (t.split(":")(0).toInt, t.split(":")(1).toFloat) } toMap)
- //     println(troveMap)
+      //     println(troveMap)
       (splitFeatures(0).toInt, troveMap)
     }
     val inputSplit = input.split("\n")
@@ -125,14 +125,15 @@ object Instance {
       } else {
         dummyFeatures
       }
-    }) toMap
+    })
 
-    val cleanedParameterFeatures = parameterFeatures filterNot { case (k, v) => v.isEmpty }
-    val parameterLines = cleanedParameterFeatures.size
-    val labels = inputSplit(4 + parameterLines).split("\t") map stringToAction
-    val weightLabels = inputSplit(5 + parameterLines).split("\t") map stringToAction
-    val costs = inputSplit(6 + parameterLines).split("\t") map { i => i.toFloat }
-    new Instance[T](coreFeatures, cleanedParameterFeatures, labels, weightLabels, costs, errors)
+    val filteredParameterFeatures = parameterFeatures filterNot (_._1 == -1)
+    val parameterLines = filteredParameterFeatures.size
+
+    val labels = inputSplit(parameterLines + 4).split("\t") map stringToAction
+    val weightLabels = inputSplit(parameterLines + 5).split("\t") map stringToAction
+    val costs = inputSplit(parameterLines + 6).split("\t") map { i => i.toFloat }
+    new Instance[T](coreFeatures, filteredParameterFeatures.toMap, labels, weightLabels, costs, errors)
   }
 
   def troveMapToScala(trove: gnu.trove.map.hash.THashMap[Int, Float]): Map[Int, Float] = {
