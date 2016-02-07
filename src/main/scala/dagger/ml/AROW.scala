@@ -119,6 +119,7 @@ object AROW {
     val updateRule: PerceptronUpdateRule[T] = options.CLASSIFIER match {
       case "PA" => new PassiveAggressiveUpdate[T]()
       case "AROW" => new AROWUpdate[T]()
+      case "PERCEPTRON" => new PerceptronUpdateRule[T]()
     }
 
     Instance.setRareFeatures(rareFeats)

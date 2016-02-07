@@ -30,7 +30,7 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
   lazy val INSTANCE_ERROR_MAX = getInt("--instanceThreshold", 1000)
 
-  lazy val CLASSIFIER = getString("--classifier", "AROW") // {AROW, PASSIVE_AGGRESSIVE, PERCEPTRON}
+  lazy val CLASSIFIER = getString("--classifier", "AROW") // {AROW, PA, PERCEPTRON}
 
   override def toString = {
     "AROW OPTIONS:\n" +
