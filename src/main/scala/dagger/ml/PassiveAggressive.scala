@@ -5,7 +5,6 @@ import java.io.FileWriter
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-import gnu.trove._
 import scala.util.Random
 
 /**

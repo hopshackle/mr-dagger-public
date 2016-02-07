@@ -356,7 +356,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     }
     (Some(trans.construct(state, ex)), actions.toArray, expertUsed.toArray)
   }
-  
+
   def extractParameterFeatures(featFnOutput: Array[(Map[Int, Float], Map[Int, Float])]): Map[Int, Map[Int, Float]] = {
     (featFnOutput.zipWithIndex filterNot (_._1._2.isEmpty) map { case (f, i) => (i -> f._2) }).toMap
   }
@@ -373,15 +373,9 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
 
   def trainFromInstances(instances: Iterable[Instance[A]], actions: Array[A], old: MultiClassClassifier[A]): MultiClassClassifier[A] = {
     val weightLabels = actions map (_.getMasterLabel.asInstanceOf[A])
-    options.CLASSIFIER match {
-      case "AROW" => {
-        old match {
-          case c: AROWClassifier[A] => AROW.train[A](instances, weightLabels, options, Some(c))
-          case _ => AROW.train[A](instances, weightLabels, options)
-        }
-      }
-      case "PASSIVE_AGGRESSIVE" => ??? //PassiveAggressive.train[A](instances, actions, options.RATE, random, options)
-      case "PERCEPTRON" => ??? // Perceptron.train[A](instances, actions, options.RATE, random, options)
+    old match {
+      case c: AROWClassifier[A] => AROW.train[A](instances, weightLabels, options, Some(c))
+      case _ => AROW.train[A](instances, weightLabels, options)
     }
   }
   def decode(ex: D, classifierPolicy: ProbabilisticClassifierPolicy[D, A, S], expert: HeuristicPolicy[D, A, S],

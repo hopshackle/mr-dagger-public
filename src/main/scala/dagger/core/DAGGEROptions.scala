@@ -19,8 +19,6 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   // using the data structure [D]'s equality method.
   lazy val CHECK_ORACLE = getBoolean("--check.oracle", default = false)
 
-  lazy val CLASSIFIER = getString("--classifier", "AROW") // {AROW, PASSIVE_AGGRESSIVE, PERCEPTRON}
-
   lazy val DAGGER_ITERATIONS = getInt("--dagger.iterations", 10)
 
   var DAGGER_OUTPUT_PATH = getString("--dagger.output.path", "./")

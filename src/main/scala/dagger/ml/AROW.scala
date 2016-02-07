@@ -27,7 +27,7 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
           weights(weightLabel) = new HashMap[Int, Float]
           cachedWeights(weightLabel) = new HashMap[Int, Float]
         }
-        label -> dotMap( pruned, weights(weightLabel))
+        label -> dotMap(pruned, weights(weightLabel))
     }
     Prediction[T](label2score = scores.toMap)
   }
@@ -116,6 +116,11 @@ object AROW {
     timer.start
     var classifier = init
     val errors = new Array[Double](rounds)
+    val updateRule: PerceptronUpdateRule[T] = options.CLASSIFIER match {
+      case "PA" => new PassiveAggressiveUpdate[T]()
+      case "AROW" => new AROWUpdate[T]()
+    }
+
     Instance.setRareFeatures(rareFeats)
     // hack. should be tided up. The problem was that I want to keep all the features in the instance, because the instance also
     // holds state information about number of errors made (for alpha bound), and the weight updates made historically (for averaging)
@@ -129,7 +134,7 @@ object AROW {
         if (options.AROW_PRINT_INTERVAL > 0 && i % options.AROW_PRINT_INTERVAL == 0) print("\rRound %d...instance %d...".format(r, i))
         if (instance.getErrorCount < options.INSTANCE_ERROR_MAX) {
           if (verbose) println("Instance " + i)
-          val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random)
+          val (misClassification, newClassifier) = innerLoop(i, r, instance, options, classifier, random, updateRule)
           classifier = newClassifier
           if (misClassification) errors(r - 1) += 1
         }
@@ -160,95 +165,21 @@ object AROW {
     classifier
   }
 
-  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], random: Random): (Boolean, AROWClassifier[T]) = {
-    //println(instance)
-    // maxLabel refers to labels - NOT weightLabels
-    val weightVectors = classifier.weights
-    val cachedWeightVectors = classifier.cachedWeights
-    val varianceVectors = classifier.variances
+  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], 
+      random: Random, updateRule: PerceptronUpdateRule[T]): (Boolean, AROWClassifier[T]) = {
     val prediction = classifier.predict(instance)
     val maxLabel = prediction.maxLabel
-    val maxScore = prediction.maxScore
     val icost = instance.costOf(maxLabel)
-    //       if (verbose) println(f"Prediction ${prediction}, maxLabel ${maxLabel}, maxScore ${maxScore}%.2f, iCost ${icost}%.2f")
     val error = if (icost > 0.0) true else false
-    if (icost > 0.0) {
+    if (error) {
       instance.errorIncrement
-
-      // correctLabels is an array of all those with cost of 0.0
-      // so this line produces tuple of correct label with the lowest score from the classifier (i.e. the least good correct prediction)
-      val temp = instance.correctLabels.map(l => (l, prediction.label2score(l))).toArray.sortBy(_._2)
-      if (temp.isEmpty) println("No Correct Labels found for: \n" + instance)
-      val (minCorrectLabel, minCorrectScore) = temp.head
-      val zVectorPredicted = new HashMap[Int, Float]()
-      val zVectorMinCorrect = new HashMap[Int, Float]()
-
-      // 
-      val labelList = instance.labels
-      val iMaxLabel = labelList.indexOf(maxLabel)
-
-      val maxWeightLabel = instance.weightLabels(iMaxLabel)
-      //        if (maxLabel != maxWeightLabel) println(maxLabel + " using weights for " + maxWeightLabel)
-      val iMinCorrectLabel = labelList.indexOf(minCorrectLabel)
-      val minCorrectWeightLabel = instance.weightLabels(iMinCorrectLabel)
-      //        if (minCorrectLabel != minCorrectWeightLabel) println(minCorrectLabel + " using weights for " + minCorrectWeightLabel)
-      for (feat <- (instance.feats(iMaxLabel).keySet diff Instance.rareFeatures)) {
-        if (varianceVectors.contains(maxWeightLabel))
-          zVectorPredicted(feat) = instance.feats(iMaxLabel)(feat) * varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f)
-        else
-          zVectorPredicted(feat) = instance.feats(iMaxLabel)(feat)
-      }
-      for (feat <- (instance.feats(iMinCorrectLabel).keySet diff Instance.rareFeatures)) {
-        if (varianceVectors.contains(minCorrectWeightLabel))
-          zVectorMinCorrect(feat) = instance.feats(iMinCorrectLabel)(feat) * varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f)
-        else
-          zVectorMinCorrect(feat) = instance.feats(iMinCorrectLabel)(feat)
-      }
-
-      val preDot = dotMap(instance.feats(iMaxLabel), zVectorPredicted)
-      val minDot = dotMap(instance.feats(iMinCorrectLabel), zVectorMinCorrect)
-      val confidence = preDot + minDot
-
-      val beta = 1.0f / (confidence + options.SMOOTHING.toFloat)
-      val loss = (maxScore - minCorrectScore + Math.sqrt(icost)).toFloat
-      val alpha = loss * beta
-
-      if (options.VERBOSE) {
-        println("confidence = " + confidence)
-        println("max label = " + maxLabel)
-        println("max score = " + maxScore)
-        println("correct label = " + minCorrectLabel)
-        println("correct score = " + minCorrectScore)
-        println("Instance cost of max prediction = " + icost)
-        println("alpha = " + alpha)
-        println("beta = " + beta)
-        println("loss = " + loss)
-        println("pre dot = " + preDot)
-        println("min dot = " + minDot)
-      }
-
-      add(weightVectors(maxWeightLabel), zVectorPredicted, -1.0f * alpha)
-      add(weightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha)
-      if (options.AVERAGING) {
-        add(cachedWeightVectors(maxWeightLabel), zVectorPredicted, -1.0f * alpha * classifier.averagingCounter)
-        add(cachedWeightVectors(minCorrectWeightLabel), zVectorMinCorrect, alpha * classifier.averagingCounter)
-      }
-
-      for (feat <- instance.feats(iMaxLabel).keySet diff Instance.rareFeatures) {
-        // AV: you can save yourself this if by initializing them in the beginning
-        if (!varianceVectors.contains(maxWeightLabel)) varianceVectors(maxWeightLabel) = new HashMap[Int, Float]
-        varianceVectors(maxWeightLabel)(feat) = varianceVectors(maxWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorPredicted(feat), 2).toFloat
-      }
-      for (feat <- instance.feats(iMinCorrectLabel).keySet diff Instance.rareFeatures) {
-        // AV: you can save yourself this if by initializing them in the beginning
-        if (!varianceVectors.contains(minCorrectWeightLabel)) varianceVectors(minCorrectWeightLabel) = new HashMap[Int, Float]
-        varianceVectors(minCorrectWeightLabel)(feat) = (varianceVectors(minCorrectWeightLabel).getOrElse(feat, 1.0f) - beta * math.pow(zVectorMinCorrect(feat), 2)).toFloat
-      }
+      // updates classifier in situ
+      updateRule.update(instance, classifier, options)
     }
-    (error, new AROWClassifier[T](weightVectors, varianceVectors, classifier.averagingCounter + 1, cachedWeightVectors))
+    (error, classifier.copy(averagingCounter = classifier.averagingCounter + 1))
   }
 
-  def add(v1: HashMap[Int, Float], v2: HashMap[Int, Float], damp: Float = 1.0f) = {
+  def add(v1: HashMap[Int, Float], v2: Map[Int, Float], damp: Float = 1.0f) = {
     for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
 
@@ -264,8 +195,8 @@ object AROW {
     // To avoid multi-counting, we take the distinct features from each instance (which has multiple featureVectors)
     val reducedFeatures = for {
       d <- data
-      keys = d.coreFeats.keySet ++ ( d.parameterFeats flatMap {
-        case(k, v)  => v.keySet
+      keys = d.coreFeats.keySet ++ (d.parameterFeats flatMap {
+        case (k, v) => v.keySet
       })
     } yield keys
 

@@ -118,19 +118,6 @@ object Instance {
     new Instance[T](coreFeatures, filteredParameterFeatures.toMap, labels, weightLabels, costs, errors)
   }
 
-  def troveMapToScala(trove: gnu.trove.map.hash.THashMap[Int, Float]): Map[Int, Float] = {
-    import scala.collection.JavaConversions._
-    trove
-  }
-
-  def scalaMapToTrove(scalaMap: Map[Int, Float]): gnu.trove.map.hash.THashMap[Int, Float] = {
-    var output = new gnu.trove.map.hash.THashMap[Int, Float]()
-    for (key <- scalaMap.keys) {
-      output.put(key, scalaMap(key))
-    }
-    output
-  }
-
   def pruneRareFeatures(feats: Map[Int, Float]): Map[Int, Float] = {
     import scala.collection.JavaConversions._
     var prunedFeatures = new HashMap[Int, Float]()

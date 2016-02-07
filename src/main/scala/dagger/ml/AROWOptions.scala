@@ -30,14 +30,16 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
   lazy val INSTANCE_ERROR_MAX = getInt("--instanceThreshold", 1000)
 
+  lazy val CLASSIFIER = getString("--classifier", "AROW") // {AROW, PASSIVE_AGGRESSIVE, PERCEPTRON}
+
   override def toString = {
     "AROW OPTIONS:\n" +
-    "  AROW min count for rare feats: %d\n".format(RARE_FEATURE_COUNT) +
-    "  AROW train iterations: %d\n".format(TRAIN_ITERATIONS) +
-    "  AROW tune regularizer: %s\n".format(TUNE_REGULARIZER) +
-    "  AROW average params: %s\n".format(AVERAGING) +
-    "  AROW shuffle data? %s\n".format(SHUFFLE) +
-    "  Verbose? %s\n".format(VERBOSE)
+      "  AROW min count for rare feats: %d\n".format(RARE_FEATURE_COUNT) +
+      "  AROW train iterations: %d\n".format(TRAIN_ITERATIONS) +
+      "  AROW tune regularizer: %s\n".format(TUNE_REGULARIZER) +
+      "  AROW average params: %s\n".format(AVERAGING) +
+      "  AROW shuffle data? %s\n".format(SHUFFLE) +
+      "  Verbose? %s\n".format(VERBOSE)
   }
 }
 
