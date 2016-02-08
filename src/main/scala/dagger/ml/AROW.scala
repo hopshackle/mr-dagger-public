@@ -183,7 +183,10 @@ object AROW {
   def add(v1: HashMap[Int, Float], v2: Map[Int, Float], damp: Float = 1.0f) = {
     for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
-
+/*
+ * dotMap assumes that the smaller map is the first argument, so there is less to iterate over.
+ * This should usually be the feature vector, not the weights
+ */
   def dotMap(v1: Map[Int, Float], v2: Map[Int, Float]): Float = {
     v1.foldLeft(0.0f) { case (sum, (f, v)) => sum + v * v2.getOrElse(f, 0.0f) }
   }
