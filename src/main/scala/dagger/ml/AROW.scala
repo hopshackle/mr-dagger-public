@@ -14,9 +14,9 @@ import scala.language.postfixOps
  * Date: 5/14/14
  * Time: 12:13 PM
  */
-case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]](),
+case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] = HashMap[T, HashMap[Int, Float]](),
   variances: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]](),
-  averagingCounter: Int = 1, cachedWeights: HashMap[T, HashMap[Int, Float]] = new HashMap[T, HashMap[Int, Float]]())
+  averagingCounter: Int = 1, cachedWeights: HashMap[T, HashMap[Int, Float]] = HashMap[T, HashMap[Int, Float]]())
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
