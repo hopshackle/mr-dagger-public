@@ -150,7 +150,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
               predictUsingPolicy(d, state, policy, allPermissibleActions, featFn.features)
             else {
               // pick a non-expert action at random
-              val numberToPick = math.max(options.ROLLOUT_LIMIT / 3, 1)
+              val numberToPick = options.ROLLOUT_LIMIT
               val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
               val allChoices = (if (excludingExpertChoice.size > numberToPick) {
                 val randomNumbers = Random.shuffle[Int, Seq](Range(0, excludingExpertChoice.size)) take numberToPick

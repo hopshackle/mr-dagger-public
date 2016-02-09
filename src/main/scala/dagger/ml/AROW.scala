@@ -20,6 +20,8 @@ case class AROWClassifier[T: ClassTag](weights: HashMap[T, HashMap[Int, Float]] 
   extends MultiClassClassifier[T] {
 
   def predict(instance: Instance[T]): Prediction[T] = {
+
+    // immutable version
     val scores = (instance.labels, instance.weightLabels, (0 until instance.labels.size)).zipped map {
       case (label, weightLabel, index) =>
         val pruned = if (Instance.rareFeatures.isEmpty) instance.feats(index) else Instance.pruneRareFeatures(instance.feats(index))
@@ -166,8 +168,8 @@ object AROW {
     classifier
   }
 
-  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T], 
-      random: Random, updateRule: PerceptronUpdateRule[T]): (Boolean, AROWClassifier[T]) = {
+  def innerLoop[T: ClassTag](i: Int, r: Int, instance: Instance[T], options: AROWOptions, classifier: AROWClassifier[T],
+    random: Random, updateRule: PerceptronUpdateRule[T]): (Boolean, AROWClassifier[T]) = {
     val prediction = classifier.predict(instance)
     val maxLabel = prediction.maxLabel
     val icost = instance.costOf(maxLabel)
@@ -183,7 +185,7 @@ object AROW {
   def add(v1: HashMap[Int, Float], v2: Map[Int, Float], damp: Float = 1.0f) = {
     for ((key, value) <- v2) v1(key) = v1.getOrElse(key, 0.0f) + value * damp
   }
-/*
+  /*
  * dotMap assumes that the smaller map is the first argument, so there is less to iterate over.
  * This should usually be the feature vector, not the weights
  */
