@@ -17,7 +17,7 @@ import scala.util.Random
 // D = Data
 // A = Action
 // S = State
-class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
+class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
   val random = new Random(options.RANDOM_SEED)
 
   def train(data: Iterable[D],
@@ -113,6 +113,7 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     val allData = fork(dataWithIndex, options.NUM_CORES).flatMap {
       case (d, dcount) =>
         val MAX_ACTIONS = Math.max(original_MAX_ACTIONS, d.size * options.ACTIONS_PER_SIZE)
+        options.MAX_ACTIONS = MAX_ACTIONS
         val instances = new ArrayBuffer[Instance[A]]
         // We create new Loss and Feature functions each time for thread-safety as they cache some results for performance reasons
         val loss = lossFactory.newLossFunction
@@ -291,10 +292,13 @@ class DAGGER[D <: DaggerData: ClassTag, A <: TransitionAction[S]: ClassTag, S <:
     var state = start
     var actionsTaken = 0
     while (!trans.isTerminal(state) && actionsTaken < options.MAX_ACTIONS) {
-      val permissibleActions = trans.permissibleActions(state)
-      if (permissibleActions.isEmpty) {
-        return (None, actions.toArray, expertUsed.toArray)
-      }
+      val temp = trans.permissibleActions(state)
+      val permissibleActions = if (temp.isEmpty) {
+        println("No permissible actions for " + ex)
+        println("From state " + state)
+        //       return (Some(ex.getEmptyExample.asInstanceOf[D]), actions.toArray, expertUsed.toArray)
+        Array(ex.getDefaultAction)
+      } else temp
       val policy = (rollIn, options.EXPERT_HORIZON_ROLLOUT, actionsTaken >= options.USE_EXPERT_ON_ROLLOUT_AFTER, classifierPolicy.classifier == null, random.nextDouble <= prob) match {
         case (_, _, _, true, _) =>
           expertUsed += true; expertPolicy

@@ -24,7 +24,7 @@ class AROWOptions(args: Array[String]) extends ArgParser(args) {
 
   lazy val TUNE_REGULARIZER = getBoolean("--tune.regularizer", default = false)
 
-  lazy val AVERAGING = getBoolean("--average", default = false)
+  lazy val AVERAGING = getBoolean("--average", default = true)
 
   lazy val VERBOSE = getBoolean("--verbose", default = false)
 
