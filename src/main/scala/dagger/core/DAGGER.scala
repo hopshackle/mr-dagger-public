@@ -8,7 +8,6 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
-import scala.util.Random
 
 /**
  * Created by narad on 6/10/14.
@@ -18,7 +17,7 @@ import scala.util.Random
 // A = Action
 // S = State
 class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag, S <: TransitionState: ClassTag](options: DAGGEROptions) {
-  val random = new Random(options.RANDOM_SEED)
+  val random = new util.Random(options.RANDOM_SEED)
 
   def train(data: Iterable[D],
     expert: HeuristicPolicy[D, A, S],
@@ -37,6 +36,7 @@ class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag
     var instances = new ArrayBuffer[Instance[A]]
     var classifier = startingClassifier
     var policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
+    val allClassifiers = new Array[MultiClassClassifier[A]](options.DAGGER_ITERATIONS)
     for (i <- 1 to options.DAGGER_ITERATIONS) {
       val maxTrainingSizeThisIteration = Math.min(options.MAX_TRAINING_SIZE, options.MIN_TRAINING_SIZE + (i - 1) * options.TRAINING_SIZE_INC)
       val filteredData = data filter (_.size <= maxTrainingSizeThisIteration)
@@ -77,12 +77,24 @@ class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag
       }
 
       val classifierToTest = if (options.AVERAGING) classifier.applyAveraging else classifier
-      val policyToTest = new ProbabilisticClassifierPolicy[D, A, S](classifierToTest)
-      policy = new ProbabilisticClassifierPolicy[D, A, S](classifier)
+      if (options.ALGORITHM == "SEARN") allClassifiers(i - 1) = classifierToTest
+      // policyToTest is just used for metric calculation using the validation set; and is then discarded
+      policy = if (options.ALGORITHM == "SEARN") {
+        val SEARNClassifier = new SEARNClassifier[A](allClassifiers.reverse.filter(_ != null), options.POLICY_DECAY, random)
+        new ProbabilisticClassifierPolicy[D, A, S](SEARNClassifier)
+      } else {
+        new ProbabilisticClassifierPolicy[D, A, S](classifierToTest)
+      }
+      // policy is to be used during the next DAgger iteration for trajectory generation. 
+      // We update it with the averaged classifier (if averaging)
+      // but keep the non-averaged classifier for training
+
       // Optionally discard old training instances, as in pure imitation learning
       if (options.DISCARD_OLD_INSTANCES) instances.clear()
-      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, test, policyToTest, expert, trans, featureFactory.newFeatureFunction, lossFactory, score, utilityFunction)
+      val featureFunction = featureFactory.newFeatureFunction
+      if (dev.nonEmpty && !options.PLOT_LOSS_PER_ITERATION) stats(data, i, dev, test, policy, expert, trans, featureFunction, lossFactory, score, utilityFunction)
       classifierToTest.writeToFile(options.DAGGER_OUTPUT_PATH + "Classifier_" + i + ".txt", actionToString)
+      if (options.WRITE_FEATURE_INDEX) featureFunction.writeToFile(options.DAGGER_OUTPUT_PATH + "FeatureIndex.txt")
     }
 
     if (options.AVERAGING) classifier.applyAveraging else classifier
@@ -154,7 +166,7 @@ class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag
               val numberToPick = options.ROLLOUT_LIMIT
               val excludingExpertChoice = allPermissibleActions.filterNot { x => x == nextExpertAction }
               val allChoices = (if (excludingExpertChoice.size > numberToPick) {
-                val randomNumbers = Random.shuffle[Int, Seq](Range(0, excludingExpertChoice.size)) take numberToPick
+                val randomNumbers = random.shuffle[Int, Seq](Range(0, excludingExpertChoice.size)) take numberToPick
                 randomNumbers map excludingExpertChoice toArray
               } else excludingExpertChoice)
               allChoices.toSeq map { x => (x, 0.0f) }
@@ -279,13 +291,13 @@ class DAGGER[D <: DaggerData[S, A]: ClassTag, A <: TransitionAction[S]: ClassTag
     featureFunction: FeatureFunction[D, S, A],
     probability: Double = 1.0, rollIn: Boolean = false, debug: FileWriter = null): (Option[D], Array[A], Array[Boolean]) = {
 
-    // For Dagger we have no difference between Roll-In and Roll-Out. We always use expert with probability.
+    // For Dagger/SEARN we have no difference between Roll-In and Roll-Out. We always use expert with probability.
     // For LOLS we always Roll-In with the learned policy (if we have one, which we won't on the first iteration)
     val prob = (options.ALGORITHM, rollIn) match {
       case ("LOLS", true) | ("LOLSDet", true) | ("LIDO", true) => if (classifierPolicy.classifier == null) 1.0 else 0.0
       case (_, true) => probability
-      case ("Dagger", false) | ("LIDO", false) => probability
-      case (_, false) => if (classifierPolicy.classifier == null || Random.nextDouble < probability) 1.0 else 0.0
+      case ("Dagger", false) | ("LIDO", false) | ("SEARN", false) => probability
+      case (_, false) => if (classifierPolicy.classifier == null || random.nextDouble < probability) 1.0 else 0.0
     }
     val actions = new ArrayBuffer[A]
     val expertUsed = new ArrayBuffer[Boolean]

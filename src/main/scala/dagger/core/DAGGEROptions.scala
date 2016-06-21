@@ -91,6 +91,8 @@ class DAGGEROptions(args: Array[String]) extends AROWOptions(args) {
   
   lazy val LOG_TRAINING_STATS = getBoolean("--logTrainingStats", true)
   
+  lazy val WRITE_FEATURE_INDEX = getBoolean("--writeFeatureIndex", false)
+  
   override def toString = {
     "DAGGER Options:\n" +
       "  DAGGER Iterations: %d\n".format(DAGGER_ITERATIONS) +
